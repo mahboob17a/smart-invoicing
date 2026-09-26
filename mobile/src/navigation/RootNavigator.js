@@ -1,0 +1,89 @@
+import React from "react";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { View, ActivityIndicator } from "react-native";
+
+import { useAuth } from "../context/AuthContext";
+
+import LoginScreen from "../screens/LoginScreen";
+import SignupScreen from "../screens/SignupScreen";
+import HomeScreen from "../screens/HomeScreen";
+
+import OnboardingCompanyProfileScreen from "../screens/onboarding/OnboardingCompanyProfileScreen";
+import OnboardingIssuingIdentityScreen from "../screens/onboarding/OnboardingIssuingIdentityScreen";
+import OnboardingRecipientScreen from "../screens/onboarding/OnboardingRecipientScreen";
+import OnboardingConversionRuleScreen from "../screens/onboarding/OnboardingConversionRuleScreen";
+import OnboardingCompleteScreen from "../screens/onboarding/OnboardingCompleteScreen";
+
+const Stack = createNativeStackNavigator();
+
+function AuthStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Signup" component={SignupScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// A brand-new signup lands here first. Which screen it *starts* on is
+// decided by RootNavigator from onboardingSteps (Section 6 forms already
+// saved), so someone who closes the app mid-onboarding resumes where they
+// left off instead of re-entering data they already saved.
+function OnboardingStack({ initialRouteName }) {
+  return (
+    <Stack.Navigator
+      initialRouteName={initialRouteName}
+      screenOptions={{ headerShown: false }}
+    >
+      <Stack.Screen name="OnboardingCompanyProfile" component={OnboardingCompanyProfileScreen} />
+      <Stack.Screen name="OnboardingIssuingIdentity" component={OnboardingIssuingIdentityScreen} />
+      <Stack.Screen name="OnboardingRecipient" component={OnboardingRecipientScreen} />
+      <Stack.Screen name="OnboardingConversionRule" component={OnboardingConversionRuleScreen} />
+      <Stack.Screen name="OnboardingComplete" component={OnboardingCompleteScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Maps onboarding progress to "which screen should we open on" — the
+// first step that hasn't been saved yet, in the fixed Section 6 order.
+function firstIncompleteOnboardingStep(steps) {
+  if (!steps) return "OnboardingCompanyProfile";
+  if (!steps.companyProfile) return "OnboardingCompanyProfile";
+  if (!steps.issuingIdentity) return "OnboardingIssuingIdentity";
+  if (!steps.recipient) return "OnboardingRecipient";
+  if (!steps.conversionRule) return "OnboardingConversionRule";
+  return "OnboardingComplete";
+}
+
+function AppStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Home" component={HomeScreen} />
+    </Stack.Navigator>
+  );
+}
+
+export default function RootNavigator() {
+  const { isLoading, isSignedIn, organization, onboardingSteps } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#1F3864" />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      {!isSignedIn ? (
+        <AuthStack />
+      ) : organization && !organization.onboardingComplete ? (
+        <OnboardingStack initialRouteName={firstIncompleteOnboardingStep(onboardingSteps)} />
+      ) : (
+        <AppStack />
+      )}
+    </NavigationContainer>
+  );
+}
