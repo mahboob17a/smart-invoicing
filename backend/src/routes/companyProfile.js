@@ -1,6 +1,7 @@
 const express = require("express");
 const { randomUUID } = require("crypto");
 const db = require("../db");
+const { findOwnedAsset, assetUrl } = require("./assets");
 
 const router = express.Router();
 
@@ -15,10 +16,13 @@ router.get("/", (req, res) => {
 
 // POST /api/company-profile  (create on first save, update on every save after)
 router.post("/", (req, res) => {
-  const { legalName, registrationNo, taxNo, addressBlock, logoAssetUrl, contactDetails } =
+  const { legalName, registrationNo, taxNo, addressBlock, logoAssetId, contactDetails } =
     req.body || {};
   if (!legalName) {
     return res.status(400).json({ error: "legalName is required" });
+  }
+  if (logoAssetId && !findOwnedAsset(req.organizationId, logoAssetId)) {
+    return res.status(400).json({ error: "logoAssetId does not refer to an uploaded logo" });
   }
 
   const existing = db
@@ -29,13 +33,13 @@ router.post("/", (req, res) => {
     db.prepare(
       `UPDATE company_profiles
        SET legal_name = ?, registration_no = ?, tax_no = ?, address_block = ?,
-           logo_asset_url = ?, contact_details = ?, updated_at = datetime('now')
+           logo_asset_id = ?, contact_details = ?, updated_at = datetime('now')
        WHERE organization_id = ?`
-    ).run(legalName, registrationNo, taxNo, addressBlock, logoAssetUrl, contactDetails, req.organizationId);
+    ).run(legalName, registrationNo, taxNo, addressBlock, logoAssetId ?? null, contactDetails, req.organizationId);
   } else {
     db.prepare(
       `INSERT INTO company_profiles
-        (id, organization_id, legal_name, registration_no, tax_no, address_block, logo_asset_url, contact_details)
+        (id, organization_id, legal_name, registration_no, tax_no, address_block, logo_asset_id, contact_details)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       randomUUID(),
@@ -44,7 +48,7 @@ router.post("/", (req, res) => {
       registrationNo,
       taxNo,
       addressBlock,
-      logoAssetUrl,
+      logoAssetId ?? null,
       contactDetails
     );
   }
@@ -62,7 +66,8 @@ function toApi(row) {
     registrationNo: row.registration_no,
     taxNo: row.tax_no,
     addressBlock: row.address_block,
-    logoAssetUrl: row.logo_asset_url,
+    logoAssetId: row.logo_asset_id,
+    logoUrl: assetUrl(row.logo_asset_id),
     contactDetails: row.contact_details,
     updatedAt: row.updated_at,
   };

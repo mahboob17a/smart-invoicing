@@ -19,8 +19,10 @@ export async function clearToken() {
   await AsyncStorage.removeItem(TOKEN_KEY);
 }
 
-async function request(path, { method = "GET", body, auth = true } = {}) {
-  const headers = { "Content-Type": "application/json" };
+// `form` sends multipart/form-data (file uploads); fetch sets that
+// Content-Type itself, including the boundary, so it must not be set here.
+async function request(path, { method = "GET", body, form, auth = true } = {}) {
+  const headers = form ? {} : { "Content-Type": "application/json" };
   if (auth) {
     const token = await getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -29,7 +31,7 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: form ?? (body ? JSON.stringify(body) : undefined),
   });
 
   const isJson = res.headers.get("content-type")?.includes("application/json");
@@ -60,4 +62,23 @@ export const api = {
 
   listConversionRules: () => request("/api/conversion-rules"),
   createConversionRule: (payload) => request("/api/conversion-rules", { method: "POST", body: payload }),
+
+  getFilenamePlaceholders: () => request("/api/filename-patterns/placeholders"),
+  getFilenamePattern: () => request("/api/filename-patterns"),
+  saveFilenamePattern: (payload) => request("/api/filename-patterns", { method: "POST", body: payload }),
+
+  getReportTemplateOptions: () => request("/api/report-templates/options"),
+  listReportTemplates: () => request("/api/report-templates"),
+  createReportTemplate: (payload) => request("/api/report-templates", { method: "POST", body: payload }),
+
+  // `image` is an expo-image-picker asset ({ uri, mimeType, fileName }).
+  uploadLogo: (image) => {
+    const form = new FormData();
+    form.append("file", {
+      uri: image.uri,
+      name: image.fileName || "logo.jpg",
+      type: image.mimeType || "image/jpeg",
+    });
+    return request("/api/assets/logo", { method: "POST", form });
+  },
 };

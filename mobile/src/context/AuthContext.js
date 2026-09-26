@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api, saveToken, getToken, clearToken } from "../api/client";
+import { EMPTY_ONBOARDING_STEPS } from "../onboarding/steps";
 
 const AuthContext = createContext(null);
 
@@ -44,12 +45,7 @@ export function AuthProvider({ children }) {
     await saveToken(result.token);
     setOrganization(result.organization);
     setUser(result.user);
-    setOnboardingSteps({
-      companyProfile: false,
-      issuingIdentity: false,
-      recipient: false,
-      conversionRule: false,
-    });
+    setOnboardingSteps(EMPTY_ONBOARDING_STEPS);
     setIsSignedIn(true);
     return result;
   }, []);

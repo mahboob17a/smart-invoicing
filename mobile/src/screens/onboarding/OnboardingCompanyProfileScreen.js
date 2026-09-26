@@ -1,13 +1,19 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { api } from "../../api/client";
+import LogoPicker from "../../components/LogoPicker";
+import { stepLabel, nextRoute } from "../../onboarding/steps";
 import { onboardingStyles as s } from "./onboardingStyles";
+
+const ROUTE = "OnboardingCompanyProfile";
 
 export default function OnboardingCompanyProfileScreen({ navigation }) {
   const [legalName, setLegalName] = useState("");
   const [registrationNo, setRegistrationNo] = useState("");
   const [taxNo, setTaxNo] = useState("");
   const [addressBlock, setAddressBlock] = useState("");
+  const [contactDetails, setContactDetails] = useState("");
+  const [logoAssetId, setLogoAssetId] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -19,8 +25,10 @@ export default function OnboardingCompanyProfileScreen({ navigation }) {
     setError(null);
     setLoading(true);
     try {
-      await api.saveCompanyProfile({ legalName, registrationNo, taxNo, addressBlock });
-      navigation.navigate("OnboardingIssuingIdentity");
+      await api.saveCompanyProfile({
+        legalName, registrationNo, taxNo, addressBlock, contactDetails, logoAssetId,
+      });
+      navigation.navigate(nextRoute(ROUTE));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -30,7 +38,7 @@ export default function OnboardingCompanyProfileScreen({ navigation }) {
 
   return (
     <ScrollView contentContainerStyle={s.container}>
-      <Text style={s.step}>Step 1 of 4</Text>
+      <Text style={s.step}>{stepLabel(ROUTE)}</Text>
       <Text style={s.title}>Your company</Text>
       <Text style={s.subtitle}>
         These details identify your account. You can change them later from Settings.
@@ -45,6 +53,17 @@ export default function OnboardingCompanyProfileScreen({ navigation }) {
         multiline
         value={addressBlock}
         onChangeText={setAddressBlock}
+      />
+      <TextInput
+        style={s.input}
+        placeholder="Contact details (phone, email)"
+        value={contactDetails}
+        onChangeText={setContactDetails}
+      />
+
+      <LogoPicker
+        label="Company logo (optional) — used on every invoice unless a template overrides it"
+        onUploaded={setLogoAssetId}
       />
 
       {error ? <Text style={s.error}>{error}</Text> : null}

@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Smart Invoicing",
+    "slug": "smart-invoicing",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.opsnest.smartinvoicing",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.opsnest.smartinvoicing"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Smart Invoicing needs access to your photos so you can choose your company logo.",
+          "cameraPermission": false
+        }
+      ]
+    ]
+  }
+}

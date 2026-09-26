@@ -11,17 +11,18 @@ const router = express.Router();
 // automatically the Account Owner (Section 5 of the design doc — no role
 // tiers, but someone has to own billing/invites for the account).
 router.post("/signup", (req, res) => {
-  const { organizationName, name, email, password } = req.body || {};
+  const { organizationName, name, password } = req.body || {};
+  const email = normalizeEmail(req.body?.email);
   if (!organizationName || !name || !email || !password) {
     return res.status(400).json({
       error: "organizationName, name, email, and password are all required",
     });
   }
-  if (password.length < 8) {
+  if (typeof password !== "string" || password.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 characters" });
   }
 
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const existing = db.prepare("SELECT id FROM users WHERE lower(email) = ?").get(email);
   if (existing) {
     return res.status(409).json({ error: "An account with that email already exists" });
   }
@@ -54,12 +55,14 @@ router.post("/signup", (req, res) => {
 
 // POST /api/auth/login
 router.post("/login", (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
+  const { password } = req.body || {};
+  const email = normalizeEmail(req.body?.email);
+  if (!email || typeof password !== "string") {
     return res.status(400).json({ error: "email and password are required" });
   }
 
-  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  // lower(): accounts created before emails were normalized on signup.
+  const user = db.prepare("SELECT * FROM users WHERE lower(email) = ?").get(email);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: "Invalid email or password" });
   }
@@ -84,5 +87,10 @@ router.post("/login", (req, res) => {
     },
   });
 });
+
+// "Jordan@Acme.test" and "jordan@acme.test" are the same person.
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
 
 module.exports = router;

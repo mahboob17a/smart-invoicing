@@ -13,7 +13,10 @@ import OnboardingCompanyProfileScreen from "../screens/onboarding/OnboardingComp
 import OnboardingIssuingIdentityScreen from "../screens/onboarding/OnboardingIssuingIdentityScreen";
 import OnboardingRecipientScreen from "../screens/onboarding/OnboardingRecipientScreen";
 import OnboardingConversionRuleScreen from "../screens/onboarding/OnboardingConversionRuleScreen";
+import OnboardingFilenamePatternScreen from "../screens/onboarding/OnboardingFilenamePatternScreen";
+import OnboardingReportTemplateScreen from "../screens/onboarding/OnboardingReportTemplateScreen";
 import OnboardingCompleteScreen from "../screens/onboarding/OnboardingCompleteScreen";
+import { firstIncompleteRoute } from "../onboarding/steps";
 
 const Stack = createNativeStackNavigator();
 
@@ -28,8 +31,9 @@ function AuthStack() {
 
 // A brand-new signup lands here first. Which screen it *starts* on is
 // decided by RootNavigator from onboardingSteps (Section 6 forms already
-// saved), so someone who closes the app mid-onboarding resumes where they
-// left off instead of re-entering data they already saved.
+// saved; see src/onboarding/steps.js for the order), so someone who
+// closes the app mid-onboarding resumes where they left off instead of
+// re-entering data they already saved.
 function OnboardingStack({ initialRouteName }) {
   return (
     <Stack.Navigator
@@ -40,20 +44,11 @@ function OnboardingStack({ initialRouteName }) {
       <Stack.Screen name="OnboardingIssuingIdentity" component={OnboardingIssuingIdentityScreen} />
       <Stack.Screen name="OnboardingRecipient" component={OnboardingRecipientScreen} />
       <Stack.Screen name="OnboardingConversionRule" component={OnboardingConversionRuleScreen} />
+      <Stack.Screen name="OnboardingFilenamePattern" component={OnboardingFilenamePatternScreen} />
+      <Stack.Screen name="OnboardingReportTemplate" component={OnboardingReportTemplateScreen} />
       <Stack.Screen name="OnboardingComplete" component={OnboardingCompleteScreen} />
     </Stack.Navigator>
   );
-}
-
-// Maps onboarding progress to "which screen should we open on" — the
-// first step that hasn't been saved yet, in the fixed Section 6 order.
-function firstIncompleteOnboardingStep(steps) {
-  if (!steps) return "OnboardingCompanyProfile";
-  if (!steps.companyProfile) return "OnboardingCompanyProfile";
-  if (!steps.issuingIdentity) return "OnboardingIssuingIdentity";
-  if (!steps.recipient) return "OnboardingRecipient";
-  if (!steps.conversionRule) return "OnboardingConversionRule";
-  return "OnboardingComplete";
 }
 
 function AppStack() {
@@ -80,7 +75,7 @@ export default function RootNavigator() {
       {!isSignedIn ? (
         <AuthStack />
       ) : organization && !organization.onboardingComplete ? (
-        <OnboardingStack initialRouteName={firstIncompleteOnboardingStep(onboardingSteps)} />
+        <OnboardingStack initialRouteName={firstIncompleteRoute(onboardingSteps)} />
       ) : (
         <AppStack />
       )}

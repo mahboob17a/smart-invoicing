@@ -12,8 +12,10 @@ const db = require("../db");
  * @param {string} table - underlying table name
  * @param {{apiField: string, dbColumn: string, required?: boolean}[]} fields
  * @param {(row: object) => object} toApi - maps a DB row to the API shape
+ * @param {(body: object, req: object) => string|null} [validate] - extra
+ *   checks beyond "required"; returns an error message to reject with
  */
-function makeListResource(table, fields, toApi) {
+function makeListResource(table, fields, toApi, validate) {
   const router = express.Router();
 
   router.get("/", (req, res) => {
@@ -30,6 +32,10 @@ function makeListResource(table, fields, toApi) {
         return res.status(400).json({ error: `${f.apiField} is required` });
       }
     }
+    const validationError = validate ? validate(body, req) : null;
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
 
     const id = randomUUID();
     const columns = ["id", "organization_id", ...fields.map((f) => f.dbColumn)];
@@ -45,9 +51,17 @@ function makeListResource(table, fields, toApi) {
   });
 
   router.delete("/:id", (req, res) => {
-    const info = db
-      .prepare(`DELETE FROM ${table} WHERE id = ? AND organization_id = ?`)
-      .run(req.params.id, req.organizationId);
+    let info;
+    try {
+      info = db
+        .prepare(`DELETE FROM ${table} WHERE id = ? AND organization_id = ?`)
+        .run(req.params.id, req.organizationId);
+    } catch (err) {
+      if (err.code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
+        return res.status(409).json({ error: "Still in use by other settings; remove those first" });
+      }
+      throw err;
+    }
     if (info.changes === 0) {
       return res.status(404).json({ error: "Not found" });
     }

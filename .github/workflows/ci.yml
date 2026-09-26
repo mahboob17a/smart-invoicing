@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # Includes the multi-tenant isolation suite (test/tenantIsolation.test.js).
+      - run: npm test
+
+  mobile:
+    name: Mobile bundle (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [android, ios]
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      # Compiles the full JS bundle exactly as a release build would, so an
+      # import or syntax error fails CI instead of failing on a device.
+      - run: npx expo export --platform ${{ matrix.platform }} --output-dir dist
+
+  # Native Android + iOS binaries via EAS Build. Runs only on main, and
+  # only once an Expo access token is configured as the EXPO_TOKEN
+  # repository secret, since native builds are slow and use build credits.
+  native-build:
+    name: Native builds (EAS)
+    needs: [backend, mobile]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Skip when EXPO_TOKEN is not configured
+        if: env.EXPO_TOKEN == ''
+        run: echo "EXPO_TOKEN secret not set; skipping native builds."
+      - uses: actions/checkout@v4
+        if: env.EXPO_TOKEN != ''
+      - uses: actions/setup-node@v4
+        if: env.EXPO_TOKEN != ''
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: expo/expo-github-action@v8
+        if: env.EXPO_TOKEN != ''
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - if: env.EXPO_TOKEN != ''
+        run: npm ci
+      - if: env.EXPO_TOKEN != ''
+        run: eas build --platform all --profile preview --non-interactive --no-wait

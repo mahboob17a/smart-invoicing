@@ -1,6 +1,11 @@
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET;
+// A missing secret must never silently fall back in production — tokens
+// signed with a well-known default would let anyone forge a session.
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("JWT_SECRET must be set in production");
+}
+const JWT_SECRET = process.env.JWT_SECRET || "dev-only-insecure-secret";
 
 function signToken(user) {
   return jwt.sign(
@@ -26,7 +31,7 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ error: "Missing bearer token" });
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] });
     req.userId = payload.sub;
     req.organizationId = payload.organizationId;
     req.isAccountOwner = payload.isAccountOwner;
