@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import LoginScreen from "../screens/LoginScreen";
 import SignupScreen from "../screens/SignupScreen";
 import HomeScreen from "../screens/HomeScreen";
+import BillReviewScreen from "../screens/BillReviewScreen";
 
 import OnboardingCompanyProfileScreen from "../screens/onboarding/OnboardingCompanyProfileScreen";
 import OnboardingIssuingIdentityScreen from "../screens/onboarding/OnboardingIssuingIdentityScreen";
@@ -55,6 +56,11 @@ function AppStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen
+        name="BillReview"
+        component={BillReviewScreen}
+        options={{ headerShown: true, title: "Review bill", headerTintColor: "#1F3864" }}
+      />
     </Stack.Navigator>
   );
 }

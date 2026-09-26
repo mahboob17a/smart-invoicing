@@ -10,6 +10,7 @@ process.env.UPLOAD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "si-uploads-"));
 process.env.JWT_SECRET = "test-secret";
 
 const app = require("../src/app");
+const extraction = require("../src/extraction");
 
 // Smallest valid PNG: 1x1 transparent pixel.
 const PNG_BYTES = Buffer.from(
@@ -98,13 +99,46 @@ async function startServer() {
     return { logo, companyProfile, issuingIdentity, recipient, conversionRule, filenamePattern, reportTemplate };
   }
 
+  async function uploadBill(token, bytes = PNG_BYTES, mimeType = "image/png", name = "bill.png") {
+    const form = new FormData();
+    form.append("file", new Blob([bytes], { type: mimeType }), name);
+    return request("POST", "/api/bills", { token, form });
+  }
+
+  // Uploads a bill and waits for its background extraction to finish.
+  async function uploadAndExtract(token, ...args) {
+    const res = await uploadBill(token, ...args);
+    if (res.status !== 201) throw new Error(`upload failed: ${JSON.stringify(res.data)}`);
+    await extraction.waitForExtraction(res.data.id);
+    return (await request("GET", `/api/bills/${res.data.id}`, { token })).data;
+  }
+
   return {
     request,
     signup,
+    uploadBill,
+    uploadAndExtract,
     uploadLogo,
     completeAllForms,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
 
-module.exports = { startServer, PNG_BYTES };
+// What the extraction service returns for a clean, fully readable bill.
+function cleanExtraction(overrides = {}) {
+  const field = (value) => ({ value, unclear: false, note: null });
+  return {
+    isBill: true,
+    problem: null,
+    vendorName: field("City Hardware"),
+    billNumber: field("INV-4471"),
+    billDate: field("2026-03-14"),
+    lineItems: [
+      { description: "Cement 50kg", quantity: 10, unit: "bag", rate: 2.5, amount: 25, unclear: false, note: null },
+      { description: "PVC pipe 2in", quantity: 4, unit: "m", rate: 1.25, amount: 5, unclear: false, note: null },
+    ],
+    ...overrides,
+  };
+}
+
+module.exports = { startServer, PNG_BYTES, extraction, cleanExtraction };

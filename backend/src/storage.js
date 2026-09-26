@@ -3,7 +3,7 @@
 // Local disk for development. Every key is prefixed with the owning
 // organization's id, matching the "namespaced per organization" layout the
 // design document specifies for S3-compatible storage — swapping to S3 in
-// production means reimplementing these two functions only.
+// production means reimplementing these functions only.
 
 const fs = require("fs");
 const path = require("path");
@@ -24,8 +24,12 @@ function putObject(key, buffer) {
   fs.writeFileSync(full, buffer);
 }
 
+function getObject(key) {
+  return fs.readFileSync(resolveKey(key));
+}
+
 function objectPath(key) {
   return resolveKey(key);
 }
 
-module.exports = { putObject, objectPath };
+module.exports = { putObject, getObject, objectPath };

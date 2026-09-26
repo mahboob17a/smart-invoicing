@@ -96,3 +96,31 @@ test("B cannot mark onboarding complete using A's configuration", async () => {
   const res = await t.request("POST", "/api/onboarding/complete", { token: b.token });
   assert.equal(res.status, 409);
 });
+
+test("B can't see, read, edit, retry, delete, or duplicate-match A's bills", async () => {
+  const { extraction, cleanExtraction } = require("./helpers");
+  extraction.setExtractor(async () => ({ result: cleanExtraction(), model: "test" }));
+  try {
+    const aBill = await t.uploadAndExtract(a.token);
+
+    assert.deepEqual((await t.request("GET", "/api/bills", { token: b.token })).data, []);
+    assert.equal((await t.request("GET", `/api/bills/${aBill.id}`, { token: b.token })).status, 404);
+    assert.equal((await t.request("GET", aBill.imageUrl, { token: b.token })).status, 404);
+    assert.equal(
+      (await t.request("PUT", `/api/bills/${aBill.id}`, { token: b.token, body: { vendorName: "pwned" } })).status,
+      404
+    );
+    assert.equal((await t.request("POST", `/api/bills/${aBill.id}/extract`, { token: b.token })).status, 404);
+    assert.equal((await t.request("DELETE", `/api/bills/${aBill.id}`, { token: b.token })).status, 404);
+
+    // The same vendor + number + date in B's account is not a duplicate of A's.
+    const bBill = await t.uploadAndExtract(b.token);
+    assert.deepEqual(bBill.duplicates, []);
+
+    const aNow = (await t.request("GET", `/api/bills/${aBill.id}`, { token: a.token })).data;
+    assert.equal(aNow.vendorName, "City Hardware");
+    assert.deepEqual(aNow.duplicates, []);
+  } finally {
+    extraction.setExtractor();
+  }
+});

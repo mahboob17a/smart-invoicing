@@ -1,8 +1,40 @@
-# OpsNest Smart Invoicing — Phase 1: Foundation & Onboarding
+# OpsNest Smart Invoicing
 
-Phase 1 of the development roadmap (Weeks 1–3). **Exit criterion:** a new
-organization can sign up, complete onboarding, and land on an empty but
-fully configured account on both platforms.
+React Native app (Android + iOS) and Node.js API, built phase by phase from
+the development roadmap. Phases 1 and 2 are in place.
+
+## Phase 2: AI-Assisted Extraction (Weeks 4–5)
+
+**Exit criterion:** a user can photograph a real bill on their phone and
+reach a corrected, save-ready draft within the app.
+
+| Roadmap item | Where |
+|---|---|
+| Native camera, photo library, and file (PDF) picker | `mobile/src/bills/capture.js`, `mobile/src/components/AddBillButtons.js` |
+| Image upload endpoint + organization-namespaced storage | `backend/src/routes/bills.js`, `backend/src/storage.js` |
+| Vision AI extraction → vendor, date, bill no., line items as JSON | `backend/src/extraction/claudeExtractor.js` (Claude, structured outputs) |
+| Review/edit screen for every field and line item | `mobile/src/screens/BillReviewScreen.js` |
+| Low-confidence fields visibly flagged, not guessed | model returns `unclear` + reason per field; shown in amber until edited or confirmed |
+| Duplicate-bill warning (same vendor + bill no. + date) | `findDuplicates` in `backend/src/routes/bills.js` |
+
+How it flows: the phone resizes the photo to ≤ 2000 px JPEG and uploads it.
+The API stores the original, creates a **draft** bill, and runs extraction
+in the background while the app polls. The reviewer fixes anything flagged
+and taps **Mark ready**, which the API refuses while any flag is unresolved
+or a line lacks description, quantity, or rate. The AI's original read is
+kept in `bills.extraction_json` and never overwritten by edits.
+
+**Extraction needs an `ANTHROPIC_API_KEY`** in `backend/.env`. Without one,
+uploads still work but extraction fails with a clear message, and the
+reviewer can retry or type the bill in by hand. The model
+(`EXTRACTION_MODEL`, default `claude-opus-5`) and effort
+(`EXTRACTION_EFFORT`, default `medium`) are env settings so they can be
+tuned against real bill photos for the design doc's under-15-seconds target.
+
+## Phase 1: Foundation & Onboarding (Weeks 1–3)
+
+**Exit criterion:** a new organization can sign up, complete onboarding, and
+land on an empty but fully configured account on both platforms.
 
 | Roadmap item | Where |
 |---|---|
@@ -26,7 +58,7 @@ cd backend
 cp .env.example .env
 npm install
 npm run dev        # http://localhost:4000
-npm test           # 25 tests: auth, every onboarding form, uploads, tenant isolation
+npm test           # 42 tests: auth, onboarding forms, uploads, bills/extraction, tenant isolation
 ```
 
 Uses `better-sqlite3` for zero-install local development; every route goes
@@ -36,7 +68,7 @@ confined to that file. Uploaded logos are stored on disk under
 S3-compatible storage). `JWT_SECRET` is **required** when
 `NODE_ENV=production`.
 
-### API added in Phase 1
+### API
 
 | Endpoint | Purpose |
 |---|---|
@@ -50,6 +82,11 @@ S3-compatible storage). `JWT_SECRET` is **required** when
 | `GET/POST/DELETE /api/report-templates`, `GET …/options` | Batch report layouts |
 | `POST /api/assets/logo`, `GET /api/assets/:id` | Logo upload (PNG/JPEG, ≤ 2 MB) and download |
 | `GET /api/onboarding/status`, `POST /api/onboarding/complete` | Wizard progress; completing requires every form saved |
+| `POST /api/bills` | Upload a bill (JPEG/PNG ≤ 5 MB, PDF ≤ 20 MB); starts extraction |
+| `GET /api/bills`, `GET /api/bills/:id` | List bills; one bill with line items, flags, and duplicates |
+| `PUT /api/bills/:id` | Save review edits; `markReady: true` to finish |
+| `POST /api/bills/:id/extract` | Retry a failed extraction |
+| `DELETE /api/bills/:id` | Delete a bill |
 
 ## Mobile (React Native / Expo, Android + iOS)
 
@@ -75,17 +112,23 @@ repository secret is configured**. That also needs a one-time
 
 ## Verification status
 
-- Backend: 25 automated tests pass, including the tenant-isolation suite
-  (another organization can't list, read, delete, or reference anything
-  it doesn't own, logos included).
-- Mobile: the Android and iOS bundles compile. The full flow (signup →
-  all 6 onboarding steps → Home → reload restores the session) was
-  clicked through in a browser build against the real backend, with no
-  runtime errors. It has **not** yet been run on a physical device or
-  simulator, and logo picking in particular needs an on-device check.
-  That's the Week 3 "internal QA pass on both Android and iOS".
+- Backend: 42 automated tests pass, including the tenant-isolation suite
+  (another organization can't list, read, edit, delete, or duplicate-match
+  anything it doesn't own: settings, logos, and bills). Tests use a stub
+  extractor; the real Claude client was checked against a mock API for its
+  request shape and its success, refusal, and auth-failure handling.
+- Mobile: the Android and iOS bundles compile. Onboarding and the bill
+  review flow (reading state, flags, resolving them, mark ready, duplicate
+  warning, failed extraction) were clicked through in a browser build
+  against the real backend with no runtime errors.
+- **Not yet verified:** extraction against real bill photos with a real API
+  key (accuracy and the 15-second target), and anything on a physical
+  device or simulator. That covers camera, photo and file picking, image
+  resizing, and the bill thumbnail, which can't be tested in a browser build.
+  The roadmap budgets Phase 2 time to tune the prompt on real samples
+  (handwritten, multi-language, low-quality scans).
 
-## Next: Phase 2, AI-Assisted Extraction
+## Next: Phase 3, Template Builder & Upload
 
-Native camera capture, bill image upload, and AI extraction. `HomeScreen.js`
-marks where it picks up.
+In-app invoice template builder with live preview, and `.docx` template
+upload with token detection and field mapping.

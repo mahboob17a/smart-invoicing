@@ -4,7 +4,7 @@
 // stand up). The schema below mirrors the data model in the design
 // document exactly (Organization, User, CompanyProfile, IssuingIdentity,
 // Recipient, ConversionRuleProfile, FilenamePattern, ReportTemplateConfig,
-// plus an assets table for uploaded logos). Swapping to PostgreSQL in production
+// Bill, BillLineItem, plus an assets table for uploaded files). Swapping to PostgreSQL in production
 // means changing this file's connection logic only — every route in
 // src/routes/ talks to the `db` object below, not to SQLite directly.
 
@@ -114,6 +114,43 @@ CREATE TABLE IF NOT EXISTS report_template_configs (
   remarks_recipient_id TEXT REFERENCES recipients(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- A captured vendor bill (design doc 8.1-8.3). Starts as a draft while
+-- AI extraction runs; the reviewer corrects it and marks it ready.
+-- extraction_json keeps the AI's original read forever, even after edits.
+CREATE TABLE IF NOT EXISTS bills (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES organizations(id),
+  image_asset_id TEXT NOT NULL REFERENCES assets(id),
+  status TEXT NOT NULL DEFAULT 'draft',
+  extraction_status TEXT NOT NULL DEFAULT 'pending',
+  extraction_error TEXT,
+  extraction_json TEXT,
+  extraction_confidence TEXT,
+  extracted_at TEXT,
+  vendor_name TEXT,
+  original_bill_no TEXT,
+  original_date TEXT,
+  field_flags_json TEXT NOT NULL DEFAULT '{}',
+  created_by TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS bills_org_created ON bills(organization_id, created_at);
+
+CREATE TABLE IF NOT EXISTS bill_line_items (
+  id TEXT PRIMARY KEY,
+  bill_id TEXT NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  description TEXT,
+  quantity REAL,
+  unit TEXT,
+  original_rate REAL,
+  amount REAL,
+  flagged_unclear INTEGER NOT NULL DEFAULT 0,
+  flag_note TEXT
+);
+CREATE INDEX IF NOT EXISTS bill_line_items_bill ON bill_line_items(bill_id, position);
 `);
 
 // CREATE TABLE IF NOT EXISTS never alters a table that already exists, so

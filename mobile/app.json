@@ -16,10 +16,11 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Smart Invoicing needs access to your photos so you can choose your company logo.",
-          "cameraPermission": false
+          "photosPermission": "Smart Invoicing needs access to your photos so you can choose bill photos and your company logo.",
+          "cameraPermission": "Smart Invoicing uses the camera to photograph vendor bills."
         }
-      ]
+      ],
+      "expo-document-picker"
     ]
   }
 }

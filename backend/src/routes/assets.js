@@ -3,17 +3,13 @@ const multer = require("multer");
 const { randomUUID } = require("crypto");
 const db = require("../db");
 const storage = require("../storage");
+const { sniffFileType } = require("../fileTypes");
 
 const router = express.Router();
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
-// The declared mime type comes from the client, so the file's leading
-// bytes are checked too — a renamed .exe must not be stored as a "logo".
-const LOGO_TYPES = {
-  "image/png": { ext: "png", magic: [0x89, 0x50, 0x4e, 0x47] },
-  "image/jpeg": { ext: "jpg", magic: [0xff, 0xd8, 0xff] },
-};
+const LOGO_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -36,20 +32,15 @@ router.post("/logo", (req, res, next) => {
     if (!file) {
       return res.status(400).json({ error: "Attach the logo image as the 'file' field" });
     }
-    const type = LOGO_TYPES[file.mimetype];
-    if (!type || !type.magic.every((byte, i) => file.buffer[i] === byte)) {
+    const type = sniffFileType(file.buffer);
+    if (!type || !LOGO_MIME_TYPES.has(type.mimeType)) {
       return res.status(400).json({ error: "Logo must be a PNG or JPEG image" });
     }
 
-    const id = randomUUID();
-    const storageKey = `${req.organizationId}/logos/${id}.${type.ext}`;
-    storage.putObject(storageKey, file.buffer);
-    db.prepare(
-      `INSERT INTO assets (id, organization_id, kind, mime_type, size_bytes, storage_key)
-       VALUES (?, ?, 'logo', ?, ?, ?)`
-    ).run(id, req.organizationId, file.mimetype, file.size, storageKey);
-
-    res.status(201).json({ id, url: assetUrl(id), mimeType: file.mimetype, sizeBytes: file.size });
+    const asset = storeAsset(req.organizationId, "logo", file.buffer, type);
+    res.status(201).json({
+      id: asset.id, url: assetUrl(asset.id), mimeType: type.mimeType, sizeBytes: file.size,
+    });
   });
 });
 
@@ -61,6 +52,19 @@ router.get("/:id", (req, res) => {
   res.type(asset.mime_type).sendFile(storage.objectPath(asset.storage_key));
 });
 
+// Writes the bytes under an organization-namespaced key and records the
+// asset row. `type` comes from sniffFileType().
+function storeAsset(organizationId, kind, buffer, type) {
+  const id = randomUUID();
+  const storageKey = `${organizationId}/${kind}s/${id}.${type.ext}`;
+  storage.putObject(storageKey, buffer);
+  db.prepare(
+    `INSERT INTO assets (id, organization_id, kind, mime_type, size_bytes, storage_key)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(id, organizationId, kind, type.mimeType, buffer.length, storageKey);
+  return { id, storageKey };
+}
+
 function findOwnedAsset(organizationId, assetId) {
   return db
     .prepare("SELECT * FROM assets WHERE id = ? AND organization_id = ?")
@@ -71,4 +75,4 @@ function assetUrl(id) {
   return id ? `/api/assets/${id}` : null;
 }
 
-module.exports = { router, findOwnedAsset, assetUrl };
+module.exports = { router, storeAsset, findOwnedAsset, assetUrl };

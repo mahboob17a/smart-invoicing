@@ -14,6 +14,7 @@ const meRoutes = require("./routes/me");
 const { router: assetRoutes } = require("./routes/assets");
 const filenamePatternRoutes = require("./routes/filenamePatterns");
 const reportTemplateRoutes = require("./routes/reportTemplates");
+const billRoutes = require("./routes/bills");
 
 const app = express();
 app.use(cors());
@@ -34,6 +35,7 @@ app.use("/api/conversion-rules", conversionRuleRoutes);
 app.use("/api/filename-patterns", filenamePatternRoutes);
 app.use("/api/report-templates", reportTemplateRoutes);
 app.use("/api/assets", assetRoutes);
+app.use("/api/bills", billRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/me", meRoutes);
 

@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // Point this at your backend during development, e.g. your machine's LAN
 // IP if testing on a physical device (localhost won't resolve from a
 // phone): "http://192.168.1.23:4000".
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:4000";
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:4000";
 
 const TOKEN_KEY = "smart_invoicing_token";
 
@@ -70,6 +70,18 @@ export const api = {
   getReportTemplateOptions: () => request("/api/report-templates/options"),
   listReportTemplates: () => request("/api/report-templates"),
   createReportTemplate: (payload) => request("/api/report-templates", { method: "POST", body: payload }),
+
+  // `file` comes from src/bills/capture.js ({ uri, name, mimeType }).
+  uploadBill: (file) => {
+    const form = new FormData();
+    form.append("file", { uri: file.uri, name: file.name, type: file.mimeType });
+    return request("/api/bills", { method: "POST", form });
+  },
+  listBills: () => request("/api/bills"),
+  getBill: (id) => request(`/api/bills/${id}`),
+  updateBill: (id, payload) => request(`/api/bills/${id}`, { method: "PUT", body: payload }),
+  retryExtraction: (id) => request(`/api/bills/${id}/extract`, { method: "POST" }),
+  deleteBill: (id) => request(`/api/bills/${id}`, { method: "DELETE" }),
 
   // `image` is an expo-image-picker asset ({ uri, mimeType, fileName }).
   uploadLogo: (image) => {
