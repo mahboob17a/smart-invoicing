@@ -88,19 +88,38 @@ S3-compatible storage). `JWT_SECRET` is **required** when
 | `POST /api/bills/:id/extract` | Retry a failed extraction |
 | `DELETE /api/bills/:id` | Delete a bill |
 
-## Mobile (React Native / Expo, Android + iOS)
+## Mobile (React Native / Expo SDK 57, Android + iOS)
 
-```bash
-cd mobile
-npm install
-npx expo start     # press a for Android, i for iOS, or scan the QR code with Expo Go
-```
+### Try it on your phone with Expo Go
 
-On a physical phone, point the app at your computer's LAN IP:
+You need Node.js 22+ on your computer, and your phone and computer on the
+**same Wi-Fi network**.
 
-```bash
-EXPO_PUBLIC_API_BASE_URL=http://192.168.1.23:4000 npx expo start
-```
+1. Install **Expo Go** from the App Store or Google Play. It must support
+   SDK 57; the current store version does.
+2. Start the backend (see above). It listens on port 4000 on every network
+   interface, so the phone can reach it.
+3. Find your computer's LAN IP address: `ipconfig` on Windows (the IPv4
+   address), `ipconfig getifaddr en0` on macOS, `hostname -I` on Linux.
+4. In a second terminal, start the app with that IP:
+
+   ```bash
+   cd mobile
+   npm install
+   EXPO_PUBLIC_API_BASE_URL=http://192.168.1.23:4000 npx expo start
+   ```
+
+   On Windows PowerShell, set the variable first:
+   `$env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.23:4000"; npx expo start`
+5. Scan the QR code: with the Camera app on iPhone, or from inside Expo Go
+   on Android.
+
+If the phone can't connect: allow Node.js through your computer's firewall
+for port 4000 (and 8081 for Expo), or run `npx expo start --tunnel`. The
+tunnel only covers the app bundle; the backend URL must still be reachable
+from the phone. To use a simulator instead, press `a` (Android emulator) or
+`i` (iOS simulator, macOS only); there `http://localhost:4000` works for
+iOS, and Android's emulator uses `http://10.0.2.2:4000`.
 
 ## CI/CD
 

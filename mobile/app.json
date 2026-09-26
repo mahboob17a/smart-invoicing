@@ -20,7 +20,8 @@
           "cameraPermission": "Smart Invoicing uses the camera to photograph vendor bills."
         }
       ],
-      "expo-document-picker"
+      "expo-document-picker",
+      "expo-status-bar"
     ]
   }
 }

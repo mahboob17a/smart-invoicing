@@ -20,7 +20,7 @@ export default function LogoPicker({ onUploaded, label = "Logo (optional)", exis
   const pick = async () => {
     setError(null);
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       // Below 1, iOS re-encodes to JPEG, so HEIC photos never reach the
       // server (which accepts PNG and JPEG only).
       quality: 0.9,

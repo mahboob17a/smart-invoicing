@@ -1,6 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 
 // Every capture path resolves to { uri, name, mimeType } ready for
 // api.uploadBill, or null if the user cancelled.
@@ -12,19 +12,17 @@ import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 const MAX_EDGE = 2000;
 
 async function prepareImage(asset) {
+  const context = ImageManipulator.manipulate(asset.uri);
+  // Files-app picks don't report dimensions, so read them from the image.
   let { width, height } = asset;
   if (!width || !height) {
-    // Files-app picks don't report dimensions; a no-op pass reads them.
-    ({ width, height } = await manipulateAsync(asset.uri, []));
+    ({ width, height } = await context.renderAsync());
   }
-  const actions =
-    Math.max(width, height) > MAX_EDGE
-      ? [{ resize: width >= height ? { width: MAX_EDGE } : { height: MAX_EDGE } }]
-      : [];
-  const result = await manipulateAsync(asset.uri, actions, {
-    compress: 0.8,
-    format: SaveFormat.JPEG,
-  });
+  if (Math.max(width, height) > MAX_EDGE) {
+    context.resize(width >= height ? { width: MAX_EDGE } : { height: MAX_EDGE });
+  }
+  const image = await context.renderAsync();
+  const result = await image.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
   return { uri: result.uri, name: "bill.jpg", mimeType: "image/jpeg" };
 }
 
@@ -36,7 +34,7 @@ export async function takePhoto() {
     throw new PermissionDeniedError("Camera access is off. Turn it on in Settings to photograph bills.");
   }
   const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ["images"],
     quality: 1,
   });
   return result.canceled ? null : prepareImage(result.assets[0]);
@@ -44,7 +42,7 @@ export async function takePhoto() {
 
 export async function choosePhoto() {
   const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ["images"],
     quality: 1,
   });
   return result.canceled ? null : prepareImage(result.assets[0]);
