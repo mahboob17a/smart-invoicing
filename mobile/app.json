@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Smart Invoicing",
+    "slug": "opsnest-smart-invoicing",
+    "scheme": "smartinvoicing",
+    "version": "0.3.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "tools.opsnest.smartinvoicing"
+    },
+    "android": {
+      "package": "tools.opsnest.smartinvoicing",
+      "adaptiveIcon": {
+        "backgroundColor": "#2E3A8C",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        { "image": "./assets/splash-icon.png", "imageWidth": 160, "backgroundColor": "#F3F3F8", "dark": { "backgroundColor": "#0F1020" } }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "Smart Invoicing uses your photos to add your company logo and, later, bill images." }
+      ],
+      "expo-font"
+    ],
+    "web": { "favicon": "./assets/favicon.png" }
+  }
+}

@@ -3,35 +3,29 @@ import { api, saveToken, getToken, clearToken } from "../api/client";
 
 const AuthContext = createContext(null);
 
+async function loadSteps(organization) {
+  if (organization.onboardingComplete) return null;
+  const status = await api.getOnboardingStatus();
+  return status.steps;
+}
+
 export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
-  const [isSignedIn, setIsSignedIn] = useState(false);
   const [organization, setOrganization] = useState(null);
   const [user, setUser] = useState(null);
   const [onboardingSteps, setOnboardingSteps] = useState(null);
 
+  // Restore the session on cold start. Onboarding progress is fetched before
+  // the navigator mounts, so the wizard opens on the first unsaved step.
   useEffect(() => {
     (async () => {
-      const token = await getToken();
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
       try {
+        if (!(await getToken())) return;
         const me = await api.getMe();
-        let steps = null;
-        if (!me.organization.onboardingComplete) {
-          const status = await api.getOnboardingStatus();
-          steps = status.steps;
-        }
+        setOnboardingSteps(await loadSteps(me.organization));
         setOrganization(me.organization);
         setUser(me.user);
-        setOnboardingSteps(steps);
-        setIsSignedIn(true);
-      } catch (e) {
-        // Token is invalid/expired, or the account no longer exists —
-        // either way, fall back to the sign-in screen rather than get
-        // stuck on a loading spinner.
+      } catch {
         await clearToken();
       } finally {
         setIsLoading(false);
@@ -39,52 +33,30 @@ export function AuthProvider({ children }) {
     })();
   }, []);
 
-  const signup = useCallback(async (payload) => {
-    const result = await api.signup(payload);
+  const start = useCallback(async (result) => {
     await saveToken(result.token);
+    setOnboardingSteps(await loadSteps(result.organization));
     setOrganization(result.organization);
     setUser(result.user);
-    setOnboardingSteps({
-      companyProfile: false,
-      issuingIdentity: false,
-      recipient: false,
-      conversionRule: false,
-    });
-    setIsSignedIn(true);
     return result;
   }, []);
 
-  const login = useCallback(async (payload) => {
-    const result = await api.login(payload);
-    await saveToken(result.token);
-    // Fetch onboarding progress before flipping isSignedIn, so
-    // OnboardingStack mounts with the correct resume screen on its very
-    // first render — React Navigation ignores initialRouteName changes
-    // after a stack has already mounted.
-    let steps = null;
-    if (!result.organization.onboardingComplete) {
-      const status = await api.getOnboardingStatus();
-      steps = status.steps;
-    }
-    setOrganization(result.organization);
-    setUser(result.user);
-    setOnboardingSteps(steps);
-    setIsSignedIn(true);
-    return result;
-  }, []);
+  const signup = useCallback(async (payload) => start(await api.signup(payload)), [start]);
+  const login = useCallback(async (payload) => start(await api.login(payload)), [start]);
 
   const signOut = useCallback(async () => {
     await clearToken();
     setOrganization(null);
     setUser(null);
     setOnboardingSteps(null);
-    setIsSignedIn(false);
   }, []);
 
-  // Called by OnboardingCompleteScreen once the user taps through, so the
-  // stack swap from Onboarding to the main App happens on purpose — not
-  // the instant the last form saves, which would yank the "you're all
-  // set" screen out from under the user before they see it.
+  const markStepDone = useCallback((key) => {
+    setOnboardingSteps((prev) => (prev ? { ...prev, [key]: true } : prev));
+  }, []);
+
+  // Called from the "You're all set" screen so the switch to the main app
+  // happens when the user taps through, not the instant the last form saves.
   const markOnboardingComplete = useCallback(() => {
     setOrganization((prev) => (prev ? { ...prev, onboardingComplete: true } : prev));
   }, []);
@@ -93,13 +65,14 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         isLoading,
-        isSignedIn,
+        isSignedIn: !!user,
         organization,
         user,
         onboardingSteps,
         signup,
         login,
         signOut,
+        markStepDone,
         markOnboardingComplete,
       }}
     >

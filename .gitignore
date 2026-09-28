@@ -1,0 +1,23 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+.expo/
+.expo-export-check/
+dist/
+web-build/
+
+# Local data
+backend/dev.db
+backend/dev.db-*
+backend/uploads/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/

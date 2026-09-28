@@ -1,19 +1,21 @@
 {
   "name": "smart-invoicing-backend",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "commonjs",
+  "engines": { "node": ">=20" },
   "scripts": {
-    "dev": "node src/index.js",
-    "prisma:migrate": "prisma migrate dev --name init",
-    "prisma:generate": "prisma generate"
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "test": "node --test --test-concurrency=1 \"test/*.test.js\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2"
   }
 }

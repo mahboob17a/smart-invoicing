@@ -11,11 +11,18 @@ const router = express.Router();
 // automatically the Account Owner (Section 5 of the design doc — no role
 // tiers, but someone has to own billing/invites for the account).
 router.post("/signup", (req, res) => {
-  const { organizationName, name, email, password } = req.body || {};
+  const body = req.body || {};
+  const organizationName = String(body.organizationName || "").trim();
+  const name = String(body.name || "").trim();
+  const email = String(body.email || "").trim().toLowerCase();
+  const password = String(body.password || "");
   if (!organizationName || !name || !email || !password) {
     return res.status(400).json({
       error: "organizationName, name, email, and password are all required",
     });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Enter a valid email address" });
   }
   if (password.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 characters" });
@@ -54,7 +61,8 @@ router.post("/signup", (req, res) => {
 
 // POST /api/auth/login
 router.post("/login", (req, res) => {
-  const { email, password } = req.body || {};
+  const email = String((req.body || {}).email || "").trim().toLowerCase();
+  const password = String((req.body || {}).password || "");
   if (!email || !password) {
     return res.status(400).json({ error: "email and password are required" });
   }

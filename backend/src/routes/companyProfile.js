@@ -15,8 +15,14 @@ router.get("/", (req, res) => {
 
 // POST /api/company-profile  (create on first save, update on every save after)
 router.post("/", (req, res) => {
-  const { legalName, registrationNo, taxNo, addressBlock, logoAssetUrl, contactDetails } =
-    req.body || {};
+  const b = req.body || {};
+  const t = (v) => (typeof v === "string" ? v.trim() || null : v ?? null);
+  const legalName = t(b.legalName);
+  const registrationNo = t(b.registrationNo);
+  const taxNo = t(b.taxNo);
+  const addressBlock = t(b.addressBlock);
+  const logoAssetUrl = t(b.logoAssetUrl);
+  const contactDetails = t(b.contactDetails);
   if (!legalName) {
     return res.status(400).json({ error: "legalName is required" });
   }
