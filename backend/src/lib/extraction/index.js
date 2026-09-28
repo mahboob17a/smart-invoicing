@@ -1,6 +1,8 @@
 // Chooses the extraction provider:
 //   anthropic — Claude vision (set ANTHROPIC_API_KEY)
+//   openai    — OpenAI vision (set OPENAI_API_KEY)
 //   manual    — no AI; the reviewer types everything (default without a key)
+// With both keys set, EXTRACTION_PROVIDER picks one; otherwise Claude is used.
 //   mock      — fixed sample reading, for tests and demos (EXTRACTION_PROVIDER=mock)
 const MOCK = {
   is_bill: true,
@@ -19,12 +21,15 @@ const MOCK = {
 function providerName() {
   const p = (process.env.EXTRACTION_PROVIDER || "").toLowerCase();
   if (p) return p;
-  return process.env.ANTHROPIC_API_KEY ? "anthropic" : "manual";
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.OPENAI_API_KEY) return "openai";
+  return "manual";
 }
 
 async function extract(files) {
   const provider = providerName();
   if (provider === "anthropic") return { provider, ...(await require("./anthropic").extract(files)) };
+  if (provider === "openai") return { provider, ...(await require("./openai").extract(files)) };
   if (provider === "mock") {
     const delay = Number(process.env.MOCK_EXTRACTION_DELAY_MS || 0);
     if (delay) await new Promise((r) => setTimeout(r, delay));

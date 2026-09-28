@@ -35,7 +35,8 @@ function replaceItems(billId, orgId, items) {
 
 function friendlyError(e) {
   const status = e?.status;
-  if (status === 401 || status === 403) return "The AI service rejected the API key. Check ANTHROPIC_API_KEY on the server.";
+  if (status === 401) return "The AI service rejected the API key. Check the key in the server's .env file.";
+  if (status === 403 || status === 404) return "The AI key can't use the chosen model. Check EXTRACTION_MODEL, or remove it to let the app choose.";
   if (status === 429) return "The AI service is busy right now. Try again in a minute.";
   if (status === 400 && /image|media|pdf/i.test(e.message)) return "The AI service couldn't open this file. Try a clearer photo or a different file.";
   if (e?.name === "APIConnectionTimeoutError" || /timed? ?out/i.test(e?.message || "")) return "Reading the bill took too long. Try again.";

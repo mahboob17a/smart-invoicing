@@ -36,15 +36,20 @@ palette, **IBM Plex Sans**, centre capture tab, light and dark mode
 | --- | --- |
 | Native camera capture, photo library (up to 5 pages) and PDF picker | Done — photos are resized to ~1800 px JPEG on the phone before upload |
 | Bill upload and storage, per organization | Done — originals are only served to signed-in users of the same organization |
-| AI extraction: vendor, vendor's original bill number, date, line items as JSON | Done — Claude vision (`backend/src/lib/extraction/`); the raw AI reading is kept (§8.2) |
+| AI extraction: vendor, vendor's original bill number, date, line items as JSON | Done — OpenAI or Claude vision (`backend/src/lib/extraction/`); the raw AI reading is kept (§8.2) |
 | Review/edit screen with the photo, field and line flags | Done — unclear or low-confidence fields are highlighted, never silently guessed |
 | Duplicate-bill warning (same vendor + original bill no. + date) | Done — matches "44-71" and "4471", "Gulf Hardware LLC" and "Gulf Hardware L.L.C." |
 | Bills list with search and filters; Home shows bills to review | Done |
-| Tests | 41 backend tests, incl. isolation of bills and bill images between organizations |
+| Tests | 46 backend tests, incl. isolation of bills and bill images between organizations |
 
-**Turn on AI reading:** add `ANTHROPIC_API_KEY=...` to `backend/.env` and
-restart the backend. Without a key, bills still upload and open for you to
-type the details in. For a demo without a key, set `EXTRACTION_PROVIDER=mock`.
+**Turn on AI reading:** add either `OPENAI_API_KEY=...` or
+`ANTHROPIC_API_KEY=...` to `backend/.env`, then run `npm run check-ai` in
+`backend` to confirm the key works and see which model will be used. With
+OpenAI you don't need to know the model name: the app picks the best vision
+model your key can use (set `EXTRACTION_MODEL` to choose one yourself).
+Restart the backend after changing `.env`. Without a key, bills still upload
+and open for you to type in. For a demo without a key, set
+`EXTRACTION_PROVIDER=mock`.
 
 ## Run the backend
 
@@ -54,7 +59,7 @@ Needs Node.js 22 or newer.
 cd backend
 cp .env.example .env        # then set JWT_SECRET to a long random value
 npm install
-npm test                    # 41 tests
+npm test                    # 46 tests
 npm run dev                 # http://localhost:4000
 ```
 
