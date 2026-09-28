@@ -19,7 +19,12 @@ echo Using http://%LANIP%:4000
 echo.
 echo === 3/4  Starting the backend (new window) ===
 if not exist backend\.env copy backend\.env.example backend\.env >nul
-start "Smart Invoicing backend" cmd /k "cd /d %~dp0backend && npm install && cd .. && start-backend.bat"
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 4000 -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"
+if errorlevel 1 (
+  start "Smart Invoicing backend" cmd /k "cd /d %~dp0backend && npm install && cd .. && start-backend.bat"
+) else (
+  echo The backend is already running - leaving it as it is. To restart it, use start-backend.bat.
+)
 
 echo.
 echo === 4/4  Starting Expo (new window - scan the QR code with Expo Go) ===
