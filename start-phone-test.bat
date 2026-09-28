@@ -19,7 +19,7 @@ echo Using http://%LANIP%:4000
 echo.
 echo === 3/4  Starting the backend (new window) ===
 if not exist backend\.env copy backend\.env.example backend\.env >nul
-start "Smart Invoicing backend" cmd /k "cd /d %~dp0backend && npm install && npm run dev"
+start "Smart Invoicing backend" cmd /k "cd /d %~dp0backend && npm install && cd .. && start-backend.bat"
 
 echo.
 echo === 4/4  Starting Expo (new window - scan the QR code with Expo Go) ===
