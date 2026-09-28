@@ -22,6 +22,10 @@ import InvoiceNumberingScreen from "../screens/setup/InvoiceNumberingScreen";
 import FilenamePatternScreen from "../screens/setup/FilenamePatternScreen";
 import ReportLayoutScreen from "../screens/setup/ReportLayoutScreen";
 import SetupCompleteScreen from "../screens/setup/SetupCompleteScreen";
+import BillsScreen from "../screens/bills/BillsScreen";
+import CaptureScreen from "../screens/bills/CaptureScreen";
+import ProcessingScreen from "../screens/bills/ProcessingScreen";
+import ReviewScreen from "../screens/bills/ReviewScreen";
 import { firstIncompleteRoute } from "../screens/setup/steps";
 
 const Stack = createNativeStackNavigator();
@@ -77,7 +81,7 @@ function CaptureButton({ onPress }) {
   );
 }
 
-function Tabs() {
+function Tabs({ navigation }) {
   const { colors, fonts } = useTheme();
   const icon = (name) => ({ color, focused }) => <Ionicons name={focused ? name : `${name}-outline`} size={22} color={color} />;
   return (
@@ -91,17 +95,12 @@ function Tabs() {
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: icon("home") }} />
+      <Tab.Screen name="Bills" component={BillsScreen} options={{ tabBarIcon: icon("receipt") }} />
       <Tab.Screen
-        name="Bills"
+        name="CaptureTab"
         component={ComingSoonScreen}
-        initialParams={{ icon: "receipt-outline", title: "Bills", body: "Captured bills, drafts and converted invoices will be listed here. Arrives in Phase 2." }}
-        options={{ tabBarIcon: icon("receipt") }}
-      />
-      <Tab.Screen
-        name="Capture"
-        component={ComingSoonScreen}
-        initialParams={{ icon: "camera-outline", title: "Capture a bill", body: "Camera capture and AI reading of vendor bills arrive in Phase 2 (weeks 4–5)." }}
-        options={{ tabBarLabel: () => null, tabBarButton: (props) => <CaptureButton onPress={props.onPress} /> }}
+        initialParams={{ icon: "camera-outline", title: "Capture", body: "" }}
+        options={{ tabBarLabel: () => null, tabBarButton: () => <CaptureButton onPress={() => navigation.navigate("Capture")} /> }}
       />
       <Tab.Screen
         name="Batches"
@@ -119,6 +118,9 @@ function AppStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={Tabs} />
+      <Stack.Screen name="Capture" component={CaptureScreen} options={{ presentation: "modal" }} />
+      <Stack.Screen name="BillProcessing" component={ProcessingScreen} options={{ gestureEnabled: false }} />
+      <Stack.Screen name="BillReview" component={ReviewScreen} />
       {SETUP_SCREENS.map(([name, component]) => <Stack.Screen key={name} name={name} component={component} />)}
     </Stack.Navigator>
   );

@@ -3,7 +3,7 @@
     "name": "Smart Invoicing",
     "slug": "opsnest-smart-invoicing",
     "scheme": "smartinvoicing",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -23,14 +23,26 @@
     "plugins": [
       [
         "expo-splash-screen",
-        { "image": "./assets/splash-icon.png", "imageWidth": 160, "backgroundColor": "#F3F3F8", "dark": { "backgroundColor": "#0F1020" } }
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#F3F3F8",
+          "dark": {
+            "backgroundColor": "#0F1020"
+          }
+        }
       ],
       [
         "expo-image-picker",
-        { "photosPermission": "Smart Invoicing uses your photos to add your company logo and, later, bill images." }
+        {
+          "photosPermission": "Smart Invoicing uses your photos to add your company logo and to read vendor bills you choose.",
+          "cameraPermission": "Smart Invoicing uses the camera to photograph vendor bills."
+        }
       ],
       "expo-font"
     ],
-    "web": { "favicon": "./assets/favicon.png" }
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
   }
 }

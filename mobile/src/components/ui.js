@@ -68,7 +68,7 @@ export function StepHeader({ step, total, title, subtitle, onBack }) {
   );
 }
 
-export function Field({ label, hint, error, style, ...input }) {
+export function Field({ label, hint, error, warning, style, ...input }) {
   const { colors, radius, space, fonts } = useTheme();
   return (
     <View style={{ gap: space.xs }}>
@@ -77,8 +77,8 @@ export function Field({ label, hint, error, style, ...input }) {
         placeholderTextColor={colors.textMuted}
         style={[
           {
-            borderWidth: 1, borderColor: error ? colors.danger : colors.border, borderRadius: radius.sm,
-            backgroundColor: colors.surface, color: colors.text, paddingHorizontal: space.md,
+            borderWidth: error || warning ? 1.5 : 1, borderColor: error ? colors.danger : warning ? colors.warning : colors.border, borderRadius: radius.sm,
+            backgroundColor: warning ? colors.warningSoft : colors.surface, color: colors.text, paddingHorizontal: space.md,
             paddingVertical: space.md, fontSize: 16, fontFamily: fonts.regular,
           },
           input.multiline && { minHeight: 84, textAlignVertical: "top" },
@@ -86,7 +86,14 @@ export function Field({ label, hint, error, style, ...input }) {
         ]}
         {...input}
       />
-      {error ? <T variant="small" color={colors.danger}>{error}</T> : hint ? <T variant="small" color={colors.textMuted}>{hint}</T> : null}
+      {error ? <T variant="small" color={colors.danger}>{error}</T> : null}
+      {!error && warning ? (
+        <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
+          <Ionicons name="warning-outline" size={14} color={colors.warning} />
+          <T variant="small" color={colors.warning} style={{ flex: 1 }}>{warning}</T>
+        </View>
+      ) : null}
+      {!error && !warning && hint ? <T variant="small" color={colors.textMuted}>{hint}</T> : null}
     </View>
   );
 }
@@ -225,6 +232,25 @@ export function Loading() {
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
       <ActivityIndicator size="large" color={colors.primary} />
+    </View>
+  );
+}
+
+const STATUS = {
+  processing: { label: "Reading…", tone: "primary" },
+  needs_review: { label: "Needs review", tone: "warning" },
+  failed: { label: "Needs review", tone: "warning" },
+  draft: { label: "Draft", tone: "success" },
+};
+
+export function StatusPill({ status }) {
+  const { colors, radius, fonts } = useTheme();
+  const s = STATUS[status] || { label: status, tone: "primary" };
+  const fg = s.tone === "warning" ? colors.warning : s.tone === "success" ? colors.success : colors.primary;
+  const bg = s.tone === "warning" ? colors.warningSoft : colors.primarySoft;
+  return (
+    <View style={{ alignSelf: "flex-start", backgroundColor: bg, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 }}>
+      <Text style={{ color: fg, fontFamily: fonts.semibold, fontSize: 11 }}>{s.label}</Text>
     </View>
   );
 }

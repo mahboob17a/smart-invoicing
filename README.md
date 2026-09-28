@@ -30,6 +30,22 @@ Look and feel follows the UI Design Board choices: **Indigo & Stamp Red**
 palette, **IBM Plex Sans**, centre capture tab, light and dark mode
 (`mobile/src/theme/theme.js`).
 
+## Status — Phase 2: AI-assisted extraction (Weeks 4–5)
+
+| Roadmap item | State |
+| --- | --- |
+| Native camera capture, photo library (up to 5 pages) and PDF picker | Done — photos are resized to ~1800 px JPEG on the phone before upload |
+| Bill upload and storage, per organization | Done — originals are only served to signed-in users of the same organization |
+| AI extraction: vendor, vendor's original bill number, date, line items as JSON | Done — Claude vision (`backend/src/lib/extraction/`); the raw AI reading is kept (§8.2) |
+| Review/edit screen with the photo, field and line flags | Done — unclear or low-confidence fields are highlighted, never silently guessed |
+| Duplicate-bill warning (same vendor + original bill no. + date) | Done — matches "44-71" and "4471", "Gulf Hardware LLC" and "Gulf Hardware L.L.C." |
+| Bills list with search and filters; Home shows bills to review | Done |
+| Tests | 41 backend tests, incl. isolation of bills and bill images between organizations |
+
+**Turn on AI reading:** add `ANTHROPIC_API_KEY=...` to `backend/.env` and
+restart the backend. Without a key, bills still upload and open for you to
+type the details in. For a demo without a key, set `EXTRACTION_PROVIDER=mock`.
+
 ## Run the backend
 
 Needs Node.js 22 or newer.
@@ -38,7 +54,7 @@ Needs Node.js 22 or newer.
 cd backend
 cp .env.example .env        # then set JWT_SECRET to a long random value
 npm install
-npm test                    # 29 tests
+npm test                    # 41 tests
 npm run dev                 # http://localhost:4000
 ```
 
@@ -67,7 +83,7 @@ $env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.23:4000"; npx expo start
 
 `npx expo start --web` opens a quick browser preview on your computer.
 
-## API (Phase 1)
+## API
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -82,8 +98,12 @@ $env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.23:4000"; npx expo start
 | `GET/PUT /api/filename-patterns`, `POST /preview` | §6.6 |
 | `/api/report-templates` (…) | §6.7 |
 | `POST /api/uploads/logo` | Logo upload (multipart `file`) |
+| `POST /api/bills` (multipart `files`: up to 5 photos or 1 PDF) | Upload a bill; reading starts in the background |
+| `GET /api/bills?status=&q=`, `GET /api/bills/summary` | Bills list, Home counts |
+| `GET/PUT/DELETE /api/bills/:id`, `POST /api/bills/:id/extract` | Review, save corrections, delete, read again |
+| `GET /api/bills/:id/files/:fileId` | Original photo/PDF (signed-in, same organization) |
 
-## Next: Phase 2 (Weeks 4–5)
+## Next: Phase 3 (Weeks 6–8)
 
-Native camera capture, bill upload, AI extraction (including the vendor's
-original bill number as a reference field) and the review/edit screen.
+Template builder with live preview, Word template upload with placeholder
+detection and field mapping, and the merge engine for uploaded templates.

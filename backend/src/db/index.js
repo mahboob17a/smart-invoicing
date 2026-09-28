@@ -143,6 +143,83 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_report_org ON report_template_configs(organization_id);`);
     },
   },
+  {
+    id: 3,
+    name: "phase 2: vendors, bills, bill files, line items",
+    up() {
+      db.exec(`
+      CREATE TABLE IF NOT EXISTS vendors (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL REFERENCES organizations(id),
+        name TEXT NOT NULL,
+        normalized_name TEXT NOT NULL,
+        default_category TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (organization_id, normalized_name)
+      );
+
+      -- status: processing -> needs_review -> draft (reviewed, save-ready).
+      -- failed = extraction error; the bill can still be completed by hand.
+      -- original_bill_no is the vendor's own number (identification + filename
+      -- only, Design Document v5.1 §8.8). It is never the invoice number.
+      CREATE TABLE IF NOT EXISTS bills (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL REFERENCES organizations(id),
+        vendor_id TEXT REFERENCES vendors(id),
+        vendor_name TEXT,
+        recipient_id TEXT REFERENCES recipients(id) ON DELETE SET NULL,
+        conversion_rule_id TEXT REFERENCES conversion_rule_profiles(id) ON DELETE SET NULL,
+        original_bill_no TEXT,
+        original_bill_no_key TEXT,
+        original_date TEXT,
+        currency_code TEXT,
+        printed_total REAL,
+        status TEXT NOT NULL DEFAULT 'processing'
+          CHECK (status IN ('processing','needs_review','draft','failed')),
+        flags_json TEXT NOT NULL DEFAULT '{}',
+        extraction_json TEXT,
+        extraction_confidence REAL,
+        extraction_provider TEXT,
+        extraction_model TEXT,
+        extraction_error TEXT,
+        extraction_ms INTEGER,
+        created_by TEXT REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT,
+        reviewed_at TEXT,
+        reviewed_by TEXT REFERENCES users(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_bills_org_status ON bills(organization_id, status);
+      CREATE INDEX IF NOT EXISTS idx_bills_dup ON bills(organization_id, original_bill_no_key);
+
+      CREATE TABLE IF NOT EXISTS bill_files (
+        id TEXT PRIMARY KEY,
+        bill_id TEXT NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
+        organization_id TEXT NOT NULL REFERENCES organizations(id),
+        storage_key TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        page_index INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_bill_files_bill ON bill_files(bill_id);
+
+      CREATE TABLE IF NOT EXISTS bill_line_items (
+        id TEXT PRIMARY KEY,
+        bill_id TEXT NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
+        organization_id TEXT NOT NULL REFERENCES organizations(id),
+        position INTEGER NOT NULL,
+        description TEXT,
+        qty REAL,
+        unit TEXT,
+        original_rate REAL,
+        amount REAL,
+        flagged_unclear INTEGER NOT NULL DEFAULT 0,
+        flag_reason TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_items_bill ON bill_line_items(bill_id);`);
+    },
+  },
 ];
 
 db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (

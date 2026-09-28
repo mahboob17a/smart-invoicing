@@ -10,6 +10,10 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (req, res) => res.json({ ok: true, service: "smart-invoicing-backend" }));
+// Only company logos are public. Bill images live under the same folder but are
+// served by GET /api/bills/:id/files/:fileId to signed-in users of that organization.
+app.use("/uploads", (req, res, next) =>
+  /^\/[0-9a-f-]{36}\/logo-[0-9a-f-]{36}\.(png|jpg|webp)$/.test(req.path) ? next() : res.status(404).json({ error: "Not found" }));
 app.use("/uploads", express.static(uploads.UPLOAD_ROOT, { fallthrough: false, maxAge: "7d" }));
 
 // Public
@@ -27,6 +31,7 @@ app.use("/api/invoice-numbering", require("./routes/invoiceNumbering"));
 app.use("/api/filename-patterns", require("./routes/filenamePatterns"));
 app.use("/api/report-templates", require("./routes/reportTemplates"));
 app.use("/api/uploads", uploads);
+app.use("/api/bills", require("./routes/bills"));
 
 app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
 
@@ -34,7 +39,10 @@ app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
 app.use((err, req, res, next) => {
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, details: err.details });
   if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Request body is not valid JSON" });
-  if (err.code === "LIMIT_FILE_SIZE") return res.status(400).json({ error: "Logo must be 2 MB or smaller" });
+  if (err.code === "LIMIT_FILE_SIZE")
+    return res.status(400).json({ error: req.originalUrl.startsWith("/api/bills") ? "Each bill file must be 15 MB or smaller" : "Logo must be 2 MB or smaller" });
+  if (err.code === "LIMIT_FILE_COUNT" || err.code === "LIMIT_UNEXPECTED_FILE")
+    return res.status(400).json({ error: "Upload up to 5 photos per bill" });
   if (err.status === 404) return res.status(404).json({ error: "Not found" });
   console.error(err);
   res.status(500).json({ error: "Internal server error" });

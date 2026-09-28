@@ -4,19 +4,26 @@ import { useFocusEffect } from "@react-navigation/native";
 import { api } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../theme/theme";
-import { Screen, T, Card, Banner } from "../../components/ui";
+import { Screen, T, Card, Banner, Button, Divider } from "../../components/ui";
+import BillRow from "../../components/BillRow";
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }) {
   const { organization, user } = useAuth();
   const { colors, space, radius } = useTheme();
+  const [summary, setSummary] = useState(null);
   const [nextNo, setNextNo] = useState(null);
 
   useFocusEffect(useCallback(() => {
+    api.bills.summary().then(setSummary).catch(() => {});
     api.numbering.get().then((n) => setNextNo(n.series[0]?.preview ?? null)).catch(() => {});
   }, []));
 
   const firstName = user?.name?.split(" ")[0];
-  const tiles = [["0", "Drafts to review"], ["0", "Converted this month"], ["0", "Open batches"]];
+  const tiles = [
+    [summary?.needsReview ?? "–", "To review", "needs_review"],
+    [summary?.drafts ?? "–", "Saved drafts", "draft"],
+    [summary?.processing ?? "–", "Being read", null],
+  ];
 
   return (
     <Screen>
@@ -25,21 +32,35 @@ export default function HomeScreen() {
         <T variant="title">Hello{firstName ? `, ${firstName}` : ""}</T>
       </View>
       <View style={{ flexDirection: "row", gap: space.sm }}>
-        {tiles.map(([n, label]) => (
+        {tiles.map(([n, label, filter]) => (
           <View key={label} style={{ flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: space.md }}>
-            <T variant="mono" style={{ fontSize: 22 }}>{n}</T>
+            <T variant="mono" style={{ fontSize: 22 }}>{String(n)}</T>
             <T variant="small" color={colors.textMuted}>{label}</T>
           </View>
         ))}
       </View>
-      <Card>
-        <T variant="heading">Ready for your first bill</T>
-        <T color={colors.textMuted}>Tap the camera button to photograph a vendor bill. Bill capture and AI reading arrive in the next release (Phase 2).</T>
-        {nextNo ? (
-          <T variant="small" color={colors.textMuted}>Your next invoice will be numbered <T variant="mono">{nextNo}</T></T>
-        ) : null}
-      </Card>
-      <Banner>Recent bills will appear here once you start capturing.</Banner>
+      {summary?.aiProvider === "manual" ? (
+        <Banner>AI bill reading isn't switched on for this server yet, so bills open for you to type in. Ask your administrator to add the AI key.</Banner>
+      ) : null}
+      {summary && summary.total === 0 ? (
+        <Card>
+          <T variant="heading">Capture your first bill</T>
+          <T color={colors.textMuted}>Photograph a vendor bill and the app reads the vendor, bill number, date and line items for you to check.</T>
+          <Button title="Capture a bill" icon="camera-outline" variant="accent" onPress={() => navigation.navigate("Capture")} />
+        </Card>
+      ) : null}
+      {summary?.recent?.length ? (
+        <Card>
+          <T variant="heading">Recent bills</T>
+          {summary.recent.map((b, i) => (
+            <View key={b.id}>
+              {i ? <Divider /> : null}
+              <BillRow bill={b} onPress={() => navigation.navigate(b.status === "processing" ? "BillProcessing" : "BillReview", { id: b.id })} />
+            </View>
+          ))}
+        </Card>
+      ) : null}
+      {nextNo ? <T variant="small" color={colors.textMuted}>Next invoice number: <T variant="mono">{nextNo}</T></T> : null}
     </Screen>
   );
 }

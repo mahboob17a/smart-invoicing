@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
 // On a physical phone, "localhost" is the phone itself. Set
 // EXPO_PUBLIC_API_BASE_URL to your computer's LAN address, e.g.
@@ -6,9 +7,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:4000";
 
 const TOKEN_KEY = "smart_invoicing_token";
-export const saveToken = (token) => AsyncStorage.setItem(TOKEN_KEY, token);
-export const getToken = () => AsyncStorage.getItem(TOKEN_KEY);
-export const clearToken = () => AsyncStorage.removeItem(TOKEN_KEY);
+let cachedToken = null;
+export const saveToken = (token) => { cachedToken = token; return AsyncStorage.setItem(TOKEN_KEY, token); };
+export const getToken = async () => (cachedToken ??= await AsyncStorage.getItem(TOKEN_KEY));
+export const clearToken = () => { cachedToken = null; return AsyncStorage.removeItem(TOKEN_KEY); };
+
+/** Image source for files that need the session (bill photos). */
+export const authedSource = (path) =>
+  path ? { uri: `${API_BASE_URL}${path}`, headers: cachedToken ? { Authorization: `Bearer ${cachedToken}` } : undefined } : null;
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -42,6 +48,16 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
 }
 
 export const assetUrl = (path) => (path && path.startsWith("/") ? `${API_BASE_URL}${path}` : path);
+
+// React Native's FormData takes { uri, name, type }; browsers need a Blob.
+async function appendFile(form, field, { uri, name, type }) {
+  if (Platform.OS === "web") {
+    const blob = await (await fetch(uri)).blob();
+    form.append(field, new Blob([blob], { type }), name);
+  } else {
+    form.append(field, { uri, name, type });
+  }
+}
 
 const crud = (base) => ({
   list: () => request(base),
@@ -81,13 +97,29 @@ export const api = {
     preview: (pattern) => request("/api/filename-patterns/preview", { method: "POST", body: { pattern } }),
   },
 
-  uploadLogo: (asset) => {
+  bills: {
+    list: (params = {}) => {
+      const q = Object.entries(params).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+      return request(`/api/bills${q ? `?${q}` : ""}`);
+    },
+    summary: () => request("/api/bills/summary"),
+    get: (id) => request(`/api/bills/${id}`),
+    save: (id, payload) => request(`/api/bills/${id}`, { method: "PUT", body: payload }),
+    reread: (id) => request(`/api/bills/${id}/extract`, { method: "POST" }),
+    remove: (id) => request(`/api/bills/${id}`, { method: "DELETE" }),
+    /** pages: [{ uri, mimeType, name }] — up to 5 photos, or one PDF */
+    upload: async (pages) => {
+      const form = new FormData();
+      for (const [i, p] of pages.entries()) {
+        await appendFile(form, "files", { uri: p.uri, name: p.name || `page-${i + 1}.jpg`, type: p.mimeType || "image/jpeg" });
+      }
+      return request("/api/bills", { method: "POST", form });
+    },
+  },
+
+  uploadLogo: async (asset) => {
     const form = new FormData();
-    form.append("file", {
-      uri: asset.uri,
-      name: asset.fileName || "logo.jpg",
-      type: asset.mimeType || "image/jpeg",
-    });
+    await appendFile(form, "file", { uri: asset.uri, name: asset.fileName || "logo.jpg", type: asset.mimeType || "image/jpeg" });
     return request("/api/uploads/logo", { method: "POST", form });
   },
 };

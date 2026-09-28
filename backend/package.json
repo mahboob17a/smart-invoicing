@@ -3,13 +3,16 @@
   "version": "0.3.0",
   "private": true,
   "type": "commonjs",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "test": "node --test --test-concurrency=1 \"test/*.test.js\""
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
