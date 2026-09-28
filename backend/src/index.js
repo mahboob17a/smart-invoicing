@@ -15,6 +15,6 @@ app.listen(PORT, () => {
   console.log(`Smart Invoicing backend listening on http://localhost:${PORT}`);
   const p = providerName();
   console.log(p === "manual"
-    ? "Bill reading: AI is OFF (set ANTHROPIC_API_KEY in .env to turn it on). Bills can still be entered by hand."
+    ? "Bill reading: AI is OFF (add OPENAI_API_KEY or ANTHROPIC_API_KEY to .env to turn it on). Bills can still be entered by hand."
     : `Bill reading: ${p}`);
 });
