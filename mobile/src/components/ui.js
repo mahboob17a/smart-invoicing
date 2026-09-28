@@ -5,7 +5,7 @@ import {
   View, Text, TextInput, Pressable, ScrollView, ActivityIndicator,
   KeyboardAvoidingView, Platform, Switch, StyleSheet,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/theme";
 
@@ -20,22 +20,26 @@ export function T({ variant = "body", color, style, children, ...rest }) {
 
 export function Screen({ children, scroll = true, footer, edges = ["top", "left", "right"] }) {
   const { colors, space } = useTheme();
+  // Android draws edge to edge: keep content and the footer clear of the
+  // system navigation bar (gesture bar or back/home buttons).
+  const insets = useSafeAreaInsets();
+  const bottom = footer ? 0 : insets.bottom;
   const body = scroll ? (
     <ScrollView
-      contentContainerStyle={{ padding: space.xl, paddingBottom: space.xxl, gap: space.lg }}
+      contentContainerStyle={{ padding: space.xl, paddingBottom: space.xxl + bottom, gap: space.lg }}
       keyboardShouldPersistTaps="handled"
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={{ flex: 1, padding: space.xl, gap: space.lg }}>{children}</View>
+    <View style={{ flex: 1, padding: space.xl, paddingBottom: space.xl + bottom, gap: space.lg }}>{children}</View>
   );
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={edges}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {body}
         {footer ? (
-          <View style={{ padding: space.lg, paddingHorizontal: space.xl, borderTopWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, gap: space.sm }}>
+          <View style={{ padding: space.lg, paddingHorizontal: space.xl, paddingBottom: space.lg + insets.bottom, borderTopWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, gap: space.sm }}>
             {footer}
           </View>
         ) : null}
