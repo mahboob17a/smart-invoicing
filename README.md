@@ -108,6 +108,27 @@ $env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.23:4000"; npx expo start
 | `GET/PUT/DELETE /api/bills/:id`, `POST /api/bills/:id/extract` | Review, save corrections, delete, read again |
 | `GET /api/bills/:id/files/:fileId` | Original photo/PDF (signed-in, same organization) |
 
+## Bill scanner with edge detection
+
+**Scan bill** uses the phone's own document scanner (Google ML Kit on Android,
+Apple VisionKit on iOS): it finds the bill's edges live, crops and straightens
+the page, and handles several pages. It is a native module, so it is **not
+available in Expo Go**. In Expo Go the Capture screen shows **Take photo**
+instead (on Android you can trim the photo to the bill's edges on the crop
+screen).
+
+To get the scanner, install the Smart Invoicing development build once:
+
+1. Create a free account at expo.dev.
+2. In `mobile`: `npx eas-cli@latest login`, then
+   `npx eas-cli@latest build -p android --profile development`
+3. When the build finishes (about 10–20 minutes), open the link on your
+   Android phone and install the APK.
+4. Start Expo with `npm run start:devclient` (instead of `start-phone-test.bat`)
+   and open the project from the installed Smart Invoicing app.
+
+Everything else works the same in Expo Go and in the development build.
+
 ## Next: Phase 3 (Weeks 6–8)
 
 Template builder with live preview, Word template upload with placeholder

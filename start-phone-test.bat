@@ -28,7 +28,7 @@ if errorlevel 1 (
 
 echo.
 echo === 4/4  Starting Expo (new window - scan the QR code with Expo Go) ===
-start "Smart Invoicing app" cmd /k "cd /d %~dp0mobile && npm install && set EXPO_PUBLIC_API_BASE_URL=http://%LANIP%:4000&& npx expo start"
+start "Smart Invoicing app" cmd /k "cd /d %~dp0mobile && npm install && set EXPO_PUBLIC_API_BASE_URL=http://%LANIP%:4000&& npx expo start --go"
 
 echo.
 echo Two windows are opening. When the Expo window shows a QR code:

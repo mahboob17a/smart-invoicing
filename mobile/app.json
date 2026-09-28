@@ -39,7 +39,13 @@
           "cameraPermission": "Smart Invoicing uses the camera to photograph vendor bills."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "react-native-document-scanner-plugin",
+        {
+          "cameraPermission": "Smart Invoicing uses the camera to scan vendor bills."
+        }
+      ]
     ],
     "web": {
       "favicon": "./assets/favicon.png"
