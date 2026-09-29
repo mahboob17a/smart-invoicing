@@ -6,9 +6,17 @@ import { useTheme } from "../theme/theme";
 import { showDate, money } from "../lib/format";
 import { T, StatusPill } from "./ui";
 
+/** Opens a bill where it is in its journey: being read, to review, or its invoice. */
+export function openBill(navigation, bill) {
+  if (bill.status === "processing") return navigation.navigate("BillProcessing", { id: bill.id });
+  if (bill.invoice) return navigation.navigate("Invoice", { id: bill.invoice.id });
+  return navigation.navigate("BillReview", { id: bill.id });
+}
+
 export default function BillRow({ bill, onPress }) {
   const { colors, radius, space } = useTheme();
-  const sub = [bill.originalBillNo ? `#${bill.originalBillNo}` : null, showDate(bill.originalDate) || null].filter(Boolean).join(" · ");
+  // The vendor's number identifies the bill; the invoice number is ours (§8.8).
+  const sub = [bill.originalBillNo ? `Bill #${bill.originalBillNo}` : null, showDate(bill.originalDate) || null].filter(Boolean).join(" · ");
   return (
     <Pressable onPress={onPress} accessibilityRole="button" style={{ flexDirection: "row", gap: space.md, alignItems: "center", paddingVertical: space.md }}>
       {bill.thumbnailUrl ? (
@@ -21,7 +29,10 @@ export default function BillRow({ bill, onPress }) {
       <View style={{ flex: 1, gap: 2 }}>
         <T style={{ fontFamily: "IBMPlexSans_600SemiBold" }} numberOfLines={1}>{bill.vendorName || (bill.status === "processing" ? "Reading bill…" : "Unnamed vendor")}</T>
         {sub ? <T variant="small" color={colors.textMuted}>{sub}</T> : null}
-        <StatusPill status={bill.status} />
+        <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+          <StatusPill status={bill.invoice ? "invoiced" : bill.status} />
+          {bill.invoice?.invoiceNo ? <T variant="mono" color={colors.success}>{bill.invoice.invoiceNo}</T> : null}
+        </View>
       </View>
       <View style={{ alignItems: "flex-end", gap: 2 }}>
         <T variant="mono">{bill.itemsTotal !== null ? money(bill.itemsTotal) : "—"}</T>

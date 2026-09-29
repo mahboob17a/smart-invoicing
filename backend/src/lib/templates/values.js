@@ -46,10 +46,15 @@ function computeValues({ identity, recipient, rule, invoiceNo, invoiceDate, bill
   };
 }
 
-/** The organization's letterhead: first issuing identity (live company profile if linked). */
-function issuingIdentityFor(orgId) {
+/**
+ * The letterhead an invoice is issued under: the given issuing identity, or the
+ * organization's first one (live company profile if it is "same as company").
+ */
+function issuingIdentityFor(orgId, identityId = null) {
   const cp = db.prepare("SELECT * FROM company_profiles WHERE organization_id = ?").get(orgId);
-  const id = db.prepare("SELECT * FROM issuing_identities WHERE organization_id = ? ORDER BY created_at LIMIT 1").get(orgId);
+  const id = identityId
+    ? db.prepare("SELECT * FROM issuing_identities WHERE id = ? AND organization_id = ?").get(identityId, orgId)
+    : db.prepare("SELECT * FROM issuing_identities WHERE organization_id = ? ORDER BY created_at LIMIT 1").get(orgId);
   const src = !id || id.same_as_company ? cp : id;
   return {
     id: id?.id || null,
@@ -79,4 +84,4 @@ function sampleValues(orgId) {
   return { values, logo: identity.logo };
 }
 
-module.exports = { computeValues, sampleValues, issuingIdentityFor, SAMPLE_LINES };
+module.exports = { computeValues, sampleValues, issuingIdentityFor, SAMPLE_LINES, round, fmtDate };

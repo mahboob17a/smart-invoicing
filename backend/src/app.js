@@ -6,7 +6,7 @@ const { HttpError } = require("./lib/http");
 const uploads = require("./routes/uploads");
 
 const app = express();
-app.use(cors());
+app.use(cors({ exposedHeaders: ["Content-Disposition", "X-Filename"] }));
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (req, res) => res.json({ ok: true, service: "smart-invoicing-backend" }));
@@ -33,6 +33,7 @@ app.use("/api/report-templates", require("./routes/reportTemplates"));
 app.use("/api/uploads", uploads);
 app.use("/api/bills", require("./routes/bills"));
 app.use("/api/templates", require("./routes/templates"));
+app.use("/api/invoices", require("./routes/invoices"));
 
 app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
 

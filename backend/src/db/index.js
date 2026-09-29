@@ -268,6 +268,54 @@ const migrations = [
       );`);
     },
   },
+  {
+    id: 5,
+    name: "phase 4: generated invoices",
+    up() {
+      // One invoice per bill. invoice_no is the app-assigned number (§8.8),
+      // NULL in Blank mode; it never changes once issued, including on
+      // regenerate. values_json is the snapshot the documents were filled with.
+      // status: generating -> ready | failed (a failed render keeps its number,
+      // so a failure never leaves a gap; "Regenerate" retries with the same one).
+      db.exec(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL REFERENCES organizations(id),
+        bill_id TEXT NOT NULL REFERENCES bills(id),
+        issuing_identity_id TEXT REFERENCES issuing_identities(id) ON DELETE SET NULL,
+        series_id TEXT REFERENCES invoice_number_series(id) ON DELETE SET NULL,
+        invoice_no TEXT,
+        seq INTEGER,
+        invoice_date TEXT NOT NULL,
+        recipient_id TEXT REFERENCES recipients(id) ON DELETE SET NULL,
+        conversion_rule_id TEXT REFERENCES conversion_rule_profiles(id) ON DELETE SET NULL,
+        template_id TEXT REFERENCES templates(id) ON DELETE SET NULL,
+        template_version INTEGER,
+        template_name TEXT,
+        values_json TEXT,
+        currency_code TEXT,
+        subtotal TEXT,
+        tax_amount TEXT,
+        grand_total TEXT,
+        filename_base TEXT,
+        docx_storage_key TEXT,
+        pdf_storage_key TEXT,
+        pdf_error TEXT,
+        status TEXT NOT NULL DEFAULT 'generating' CHECK (status IN ('generating','ready','failed')),
+        error TEXT,
+        generation_count INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        generated_at TEXT,
+        bill_reviewed_at TEXT,
+        updated_at TEXT,
+        UNIQUE (organization_id, bill_id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_number
+        ON invoices(organization_id, series_id, invoice_no) WHERE invoice_no IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_invoices_org ON invoices(organization_id, created_at);`);
+    },
+  },
 ];
 
 db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (

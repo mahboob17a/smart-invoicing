@@ -57,9 +57,10 @@ export default function ReviewScreen({ navigation, route }) {
   const setItem = (key, k) => (v) => setItems((list) => list.map((it) => (it.key === key ? { ...it, [k]: v } : it)));
   const total = useMemo(() => items.reduce((a, it) => a + (num(it.qty) || 0) * (num(it.rate) || 0), 0), [items]);
 
-  const save = async () => {
+  // then: "convert" (open the Convert screen) or "list" (back to Bills).
+  const save = async (then = "convert") => {
     setError(null);
-    setSaving(true);
+    setSaving(then);
     try {
       const saved = await api.bills.save(id, {
         ...form,
@@ -70,6 +71,11 @@ export default function ReviewScreen({ navigation, route }) {
         setBill(saved);
         setItems(saved.items.map(toForm));
         setError("Saved, but this now looks like a bill you already have. Check the warning above.");
+      } else if (saved.invoice) {
+        // Already invoiced: the invoice screen offers Regenerate with the same number.
+        navigation.navigate("Invoice", { id: saved.invoice.id });
+      } else if (then === "convert") {
+        navigation.replace("ConvertBill", { id });
       } else {
         navigation.navigate("Tabs", { screen: "Bills", params: { savedId: id } });
       }
@@ -104,7 +110,14 @@ export default function ReviewScreen({ navigation, route }) {
   const cur = bill.currencyCode || "";
 
   return (
-    <Screen footer={<Button title="Save bill" onPress={save} loading={saving} />}>
+    <Screen footer={bill.invoice ? (
+      <Button title="Save changes" onPress={() => save("convert")} loading={!!saving} />
+    ) : (
+      <View style={{ gap: space.sm }}>
+        <Button title="Save and convert" icon="arrow-forward" onPress={() => save("convert")} loading={saving === "convert"} disabled={!!saving} />
+        <Button title="Save for later" variant="ghost" onPress={() => save("list")} loading={saving === "list"} disabled={!!saving} />
+      </View>
+    )}>
       <StepHeader title="Review bill" subtitle="Check what was read against the photo. Highlighted fields need a look." onBack={() => navigation.goBack()} />
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
@@ -120,8 +133,17 @@ export default function ReviewScreen({ navigation, route }) {
             <T variant="small" color={colors.textMuted}>{bill.files.length > 1 ? `${bill.files.length} pages` : bill.files[0]?.mimeType === "application/pdf" ? "PDF" : "1 photo"}</T>
           </View>
         </Pressable>
-        <StatusPill status={bill.status} />
+        <StatusPill status={bill.invoice ? "invoiced" : bill.status} />
       </View>
+
+      {bill.invoice ? (
+        <Banner>
+          <T variant="small">This bill is invoice <T variant="mono">{bill.invoice.invoiceNo || "(number left blank)"}</T>. If you correct it, regenerate the invoice afterwards — its number stays the same.</T>
+          <Pressable onPress={() => navigation.navigate("Invoice", { id: bill.invoice.id })}>
+            <T variant="small" color={colors.primary} style={{ fontFamily: "IBMPlexSans_600SemiBold", marginTop: 4 }}>Open invoice</T>
+          </Pressable>
+        </Banner>
+      ) : null}
 
       {bill.status === "failed" ? (
         <Banner tone="warning">
@@ -210,7 +232,7 @@ export default function ReviewScreen({ navigation, route }) {
 
       <ErrorText>{error}</ErrorText>
 
-      {confirmDelete ? (
+      {bill.invoice ? null : confirmDelete ? (
         <Card>
           <T>Delete this bill and its photos? This can't be undone.</T>
           <View style={{ flexDirection: "row", gap: space.sm }}>

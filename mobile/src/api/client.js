@@ -50,6 +50,7 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
 export const assetUrl = (path) => (path && path.startsWith("/") ? `${API_BASE_URL}${path}` : path);
 
 export const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+export const PDF_TYPE = "application/pdf";
 
 // React Native's FormData takes { uri, name, type }; browsers need a Blob.
 async function appendFile(form, field, { uri, name, type }) {
@@ -108,6 +109,9 @@ export const api = {
     get: (id) => request(`/api/bills/${id}`),
     save: (id, payload) => request(`/api/bills/${id}`, { method: "PUT", body: payload }),
     reread: (id) => request(`/api/bills/${id}/extract`, { method: "POST" }),
+    /** choices: { recipientId, conversionRuleId, templateId, issuingIdentityId } — any may be left out */
+    convertPreview: (id, choices = {}) => request(`/api/bills/${id}/convert/preview`, { method: "POST", body: choices }),
+    convert: (id, choices = {}) => request(`/api/bills/${id}/convert`, { method: "POST", body: choices }),
     remove: (id) => request(`/api/bills/${id}`, { method: "DELETE" }),
     /** pages: [{ uri, mimeType, name }] — up to 5 photos, or one PDF */
     upload: async (pages) => {
@@ -117,6 +121,13 @@ export const api = {
       }
       return request("/api/bills", { method: "POST", form });
     },
+  },
+
+  invoices: {
+    list: (q) => request(`/api/invoices${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    get: (id) => request(`/api/invoices/${id}`),
+    regenerate: (id, choices = {}) => request(`/api/invoices/${id}/regenerate`, { method: "POST", body: choices }),
+    filePath: (id, format) => `/api/invoices/${id}/file?format=${format}`,
   },
 
   templates: {

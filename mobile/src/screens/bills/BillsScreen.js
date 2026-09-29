@@ -6,12 +6,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../api/client";
 import { useTheme } from "../../theme/theme";
 import { T, Field, Segmented, Button, Divider, ErrorText } from "../../components/ui";
-import BillRow from "../../components/BillRow";
+import BillRow, { openBill } from "../../components/BillRow";
 
 const FILTERS = [
   { value: null, label: "All" },
   { value: "needs_review", label: "Needs review" },
-  { value: "draft", label: "Drafts" },
+  { value: "draft", label: "To invoice" },
+  { value: "converted", label: "Invoiced" },
 ];
 
 export default function BillsScreen({ navigation }) {
@@ -39,7 +40,7 @@ export default function BillsScreen({ navigation }) {
   useFocusEffect(useCallback(() => { load(); return () => clearTimeout(timer.current); }, [load]));
   useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [q, status, load]);
 
-  const open = (b) => navigation.navigate(b.status === "processing" ? "BillProcessing" : "BillReview", { id: b.id });
+  const open = (b) => openBill(navigation, b);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={["top", "left", "right"]}>
@@ -51,7 +52,7 @@ export default function BillsScreen({ navigation }) {
         ListHeaderComponent={
           <View style={{ gap: space.md, marginBottom: space.sm }}>
             <T variant="title">Bills</T>
-            <Field value={q} onChangeText={setQ} placeholder="Search vendor or bill no." autoCorrect={false} />
+            <Field value={q} onChangeText={setQ} placeholder="Search vendor, bill no. or invoice no." autoCorrect={false} />
             <Segmented value={status} onChange={setStatus} options={FILTERS} />
             <ErrorText>{error}</ErrorText>
           </View>

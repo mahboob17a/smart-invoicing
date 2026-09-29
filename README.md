@@ -65,6 +65,26 @@ and open for you to type in. For a demo without a key, set
 Open **Settings → Invoice templates** in the app. Phase 4 uses the default
 template when an invoice is generated.
 
+## Status — Phase 4: Conversion & generation (Weeks 9–10)
+
+| Roadmap item | State |
+| --- | --- |
+| Conversion engine wired to either template type | Done — pick client, conversion rule, template (and issuing identity if you have more than one); totals follow §8.4 |
+| Invoice number at generation time | Done — taken only when you tap Generate, in the same database transaction as the invoice; previews never use a number; Blank mode assigns none |
+| Same number on regenerate / re-download | Done — Regenerate remakes the files from the corrected bill with the same number and date |
+| No gaps from failed generations | Done — the template is test-filled before a number is taken; if the files still fail, the invoice keeps its number and can be regenerated |
+| PDF + Word output, share sheet / save to phone | Done — LibreOffice makes exact PDFs of every template when installed; without it, builder templates use the built-in PDF renderer and uploaded templates offer the Word file |
+| Filenames from the saved pattern | Done — `{OriginalBillNo}` identifies the vendor bill, `{InvoiceNo}` and `{Seq}` where you add them |
+| Concurrency tests | Done — 12 conversions at once, a double tap on one bill, and 4 server processes sharing one database: no duplicates, no gaps |
+| Tests | 74 backend tests |
+
+Invoiced bills can't be deleted or re-read (invoices are accounting records);
+they can still be corrected and regenerated.
+
+**PDFs of uploaded Word templates:** install LibreOffice (free) from
+libreoffice.org and restart the backend. The startup message says which PDF
+engine is in use.
+
 ## Run the backend
 
 Needs Node.js 22 or newer.
@@ -143,8 +163,7 @@ To get the scanner, install the Smart Invoicing development build once:
 
 Everything else works the same in Expo Go and in the development build.
 
-## Next: Phase 4 (Weeks 9–10)
+## Next: Phase 5 (Weeks 11–12)
 
-Invoice generation from a reviewed bill: pricing rules and markup applied,
-the app-assigned invoice number, merge into the default template, and PDF/Word
-output to share.
+Batches: group invoiced bills, track batch status, and generate the batch
+summary report from your saved report layout.

@@ -7,6 +7,7 @@ const { badRequest, notFound, HttpError, handle } = require("../lib/http");
 const { startProcessing, findDuplicates, upsertVendor, replaceItems } = require("../lib/bills");
 const { parseDate, parseNumber, billNoKey, round } = require("../lib/extraction/normalize");
 const { providerName } = require("../lib/extraction");
+const invoices = require("../lib/invoices");
 
 // Bills (Design Document §8.1–§8.3, Roadmap v1.1 Phase 2)
 // POST   /api/bills                     multipart "files" (1–5 images, or 1 PDF) -> 202, reading starts
@@ -17,6 +18,8 @@ const { providerName } = require("../lib/extraction");
 // POST   /api/bills/:id/extract         read the bill again
 // DELETE /api/bills/:id
 // GET    /api/bills/:id/files/:fileId   the original image/PDF (signed-in users of the same organization only)
+// POST   /api/bills/:id/convert/preview totals, invoice number preview and filename — takes no number
+// POST   /api/bills/:id/convert         generate the invoice { recipientId?, conversionRuleId?, templateId?, issuingIdentityId? }
 
 const router = express.Router();
 const TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
@@ -53,6 +56,7 @@ function summaryOf(b) {
   const items = db.prepare("SELECT COUNT(*) n, SUM(amount) total, SUM(flagged_unclear) flagged FROM bill_line_items WHERE bill_id = ?").get(b.id);
   const first = db.prepare("SELECT id FROM bill_files WHERE bill_id = ? ORDER BY page_index LIMIT 1").get(b.id);
   const flags = JSON.parse(b.flags_json || "{}");
+  const inv = db.prepare("SELECT id, invoice_no, status FROM invoices WHERE bill_id = ?").get(b.id);
   return {
     id: b.id,
     status: b.status,
@@ -66,6 +70,7 @@ function summaryOf(b) {
     thumbnailUrl: first ? `/api/bills/${b.id}/files/${first.id}` : null,
     createdAt: b.created_at,
     updatedAt: b.updated_at,
+    invoice: inv ? { id: inv.id, invoiceNo: inv.invoice_no, status: inv.status } : null,
   };
 }
 
@@ -118,13 +123,17 @@ router.post("/", upload.array("files", MAX_FILES), handle((req, res) => {
 }));
 
 router.get("/summary", handle((req, res) => {
-  const rows = db.prepare("SELECT status, COUNT(*) n FROM bills WHERE organization_id = ? GROUP BY status").all(req.organizationId);
+  const rows = db.prepare(
+    `SELECT CASE WHEN EXISTS (SELECT 1 FROM invoices i WHERE i.bill_id = bills.id) THEN 'converted' ELSE status END status, COUNT(*) n
+     FROM bills WHERE organization_id = ? GROUP BY 1`
+  ).all(req.organizationId);
   const by = Object.fromEntries(rows.map((r) => [r.status, r.n]));
   const recent = db.prepare("SELECT * FROM bills WHERE organization_id = ? ORDER BY created_at DESC LIMIT 5").all(req.organizationId);
   res.json({
     processing: by.processing || 0,
     needsReview: (by.needs_review || 0) + (by.failed || 0),
     drafts: by.draft || 0,
+    converted: by.converted || 0,
     total: rows.reduce((a, r) => a + r.n, 0),
     aiProvider: providerName(),
     recent: recent.map(summaryOf),
@@ -135,11 +144,14 @@ router.get("/", handle((req, res) => {
   const { status, q } = req.query;
   const where = ["organization_id = ?"];
   const args = [req.organizationId];
+  const converted = "EXISTS (SELECT 1 FROM invoices i WHERE i.bill_id = bills.id)";
   if (status === "needs_review") where.push("status IN ('needs_review','failed','processing')");
+  else if (status === "converted") where.push(converted);
+  else if (status === "draft") where.push(`status = 'draft' AND NOT ${converted}`);
   else if (status) { where.push("status = ?"); args.push(String(status)); }
   if (q) {
-    where.push("(vendor_name LIKE ? OR original_bill_no LIKE ?)");
-    args.push(`%${q}%`, `%${q}%`);
+    where.push("(vendor_name LIKE ? OR original_bill_no LIKE ? OR EXISTS (SELECT 1 FROM invoices i WHERE i.bill_id = bills.id AND i.invoice_no LIKE ?))");
+    args.push(`%${q}%`, `%${q}%`, `%${q}%`);
   }
   const rows = db.prepare(`SELECT * FROM bills WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT 200`).all(...args);
   res.json(rows.map(summaryOf));
@@ -186,7 +198,7 @@ router.put("/:id", handle((req, res) => {
     db.prepare(
       `UPDATE bills SET vendor_id = ?, vendor_name = ?, original_bill_no = ?, original_bill_no_key = ?, original_date = ?,
          currency_code = COALESCE(?, currency_code), recipient_id = ?, flags_json = '{}', status = 'draft',
-         reviewed_at = datetime('now'), reviewed_by = ?, updated_at = datetime('now')
+         reviewed_at = strftime('%Y-%m-%d %H:%M:%f', 'now'), reviewed_by = ?, updated_at = datetime('now')
        WHERE id = ?`
     ).run(vendorId, vendorName, originalBillNo, billNoKey(originalBillNo), originalDate,
       typeof b.currencyCode === "string" && /^[A-Za-z]{3}$/.test(b.currencyCode) ? b.currencyCode.toUpperCase() : null,
@@ -195,8 +207,14 @@ router.put("/:id", handle((req, res) => {
   res.json(fullBill(getBill(bill.id, req.organizationId), req.organizationId));
 }));
 
+const hasInvoiceError = (bill, action) => {
+  const inv = invoices.invoiceForBill(bill.organization_id, bill.id);
+  if (inv) throw new HttpError(409, `This bill is invoice ${inv.invoice_no || "(number left blank)"}, so it can't be ${action}. Invoices are kept as accounting records.`);
+};
+
 router.post("/:id/extract", handle((req, res) => {
   const bill = getBill(req.params.id, req.organizationId);
+  hasInvoiceError(bill, "read again");
   if (bill.status === "processing") throw new HttpError(409, "This bill is already being read");
   startProcessing(bill.id, req.organizationId);
   res.status(202).json(fullBill(getBill(bill.id, req.organizationId), req.organizationId));
@@ -204,10 +222,20 @@ router.post("/:id/extract", handle((req, res) => {
 
 router.delete("/:id", handle((req, res) => {
   const bill = getBill(req.params.id, req.organizationId);
+  hasInvoiceError(bill, "deleted");
   const files = db.prepare("SELECT storage_key FROM bill_files WHERE bill_id = ?").all(bill.id);
   db.prepare("DELETE FROM bills WHERE id = ?").run(bill.id);
   files.forEach((f) => storage.remove(f.storage_key));
   res.status(204).send();
+}));
+
+router.post("/:id/convert/preview", handle((req, res) => {
+  res.json(invoices.preview(req.organizationId, req.params.id, req.body || {}).public);
+}));
+
+router.post("/:id/convert", handle(async (req, res) => {
+  const inv = await invoices.generate(req.organizationId, req.userId, req.params.id, req.body || {});
+  res.status(201).json(invoices.toApi(inv));
 }));
 
 router.get("/:id/files/:fileId", handle((req, res) => {

@@ -250,7 +250,10 @@ const STATUS = {
   processing: { label: "Reading…", tone: "primary" },
   needs_review: { label: "Needs review", tone: "warning" },
   failed: { label: "Needs review", tone: "warning" },
-  draft: { label: "Draft", tone: "success" },
+  draft: { label: "Ready to invoice", tone: "primary" },
+  invoiced: { label: "Invoiced", tone: "success" },
+  generating: { label: "Making files…", tone: "primary" },
+  ready: { label: "Ready", tone: "success" },
 };
 
 export function StatusPill({ status }) {

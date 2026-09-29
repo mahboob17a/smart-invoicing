@@ -5,7 +5,7 @@ import { api } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../theme/theme";
 import { Screen, T, Card, Banner, Button, Divider } from "../../components/ui";
-import BillRow from "../../components/BillRow";
+import BillRow, { openBill } from "../../components/BillRow";
 
 export default function HomeScreen({ navigation }) {
   const { organization, user } = useAuth();
@@ -23,8 +23,8 @@ export default function HomeScreen({ navigation }) {
   const firstName = user?.name?.split(" ")[0];
   const tiles = [
     [summary?.needsReview ?? "–", "To review", "needs_review"],
-    [summary?.drafts ?? "–", "Saved drafts", "draft"],
-    [summary?.processing ?? "–", "Being read", null],
+    [summary?.drafts ?? "–", "To invoice", "draft"],
+    [summary?.converted ?? "–", "Invoiced", "converted"],
   ];
 
   return (
@@ -64,7 +64,7 @@ export default function HomeScreen({ navigation }) {
           {summary.recent.map((b, i) => (
             <View key={b.id}>
               {i ? <Divider /> : null}
-              <BillRow bill={b} onPress={() => navigation.navigate(b.status === "processing" ? "BillProcessing" : "BillReview", { id: b.id })} />
+              <BillRow bill={b} onPress={() => openBill(navigation, b)} />
             </View>
           ))}
         </Card>

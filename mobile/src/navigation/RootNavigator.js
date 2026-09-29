@@ -30,6 +30,8 @@ import TemplatesScreen from "../screens/templates/TemplatesScreen";
 import TemplateBuilderScreen from "../screens/templates/TemplateBuilderScreen";
 import TemplateUploadScreen from "../screens/templates/TemplateUploadScreen";
 import TemplateMappingScreen from "../screens/templates/TemplateMappingScreen";
+import ConvertScreen from "../screens/invoices/ConvertScreen";
+import InvoiceScreen from "../screens/invoices/InvoiceScreen";
 import { firstIncompleteRoute } from "../screens/setup/steps";
 
 const Stack = createNativeStackNavigator();
@@ -125,6 +127,8 @@ function AppStack() {
       <Stack.Screen name="Capture" component={CaptureScreen} options={{ presentation: "modal" }} />
       <Stack.Screen name="BillProcessing" component={ProcessingScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="BillReview" component={ReviewScreen} />
+      <Stack.Screen name="ConvertBill" component={ConvertScreen} />
+      <Stack.Screen name="Invoice" component={InvoiceScreen} />
       <Stack.Screen name="Templates" component={TemplatesScreen} />
       <Stack.Screen name="TemplateBuilder" component={TemplateBuilderScreen} />
       <Stack.Screen name="TemplateUpload" component={TemplateUploadScreen} />

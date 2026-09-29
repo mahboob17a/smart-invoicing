@@ -9,7 +9,7 @@ const builder = require("../lib/templates/builder");
 const uploaded = require("../lib/templates/uploaded");
 const { sampleValues } = require("../lib/templates/values");
 const { exampleDocx } = require("../lib/templates/example");
-const uploadsRoute = require("./uploads");
+const { renderDocx } = require("../lib/templates/render");
 
 // Invoice templates (Design Document v5.1 §6.5, §7; Roadmap Phase 3)
 // GET    /api/templates                    list
@@ -243,18 +243,10 @@ router.post("/:id/default", handle((req, res) => {
 router.get("/:id/sample.docx", handle(asBadRequest(async (req, res) => {
   const t = get(req.params.id, req.organizationId);
   const { values, logo } = sampleValues(req.organizationId);
-  let buf;
-  if (t.source === "builder") {
-    buf = await builder.render(JSON.parse(t.config_json), values, builder.loadLogo(logo, uploadsRoute.UPLOAD_ROOT));
-  } else {
-    const file = currentFile(t);
-    const saved = mappingsOf(t);
-    const mappings = saved.length ? saved : JSON.parse(file.tokens_json).map((tk) => ({ token: tk.name, isItem: tk.isItem, field: fields.suggest(tk.name, tk.isItem) }));
-    buf = uploaded.render(storage.read(file.storage_key), { mappings, loopName: file.loop_name, values });
-  }
+  const { docx } = await renderDocx(t, values, logo);
   const safe = t.name.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "template";
   res.set("Content-Disposition", `attachment; filename="${safe}_sample.docx"`);
-  res.type(DOCX).send(buf);
+  res.type(DOCX).send(docx);
 })));
 
 router.delete("/:id", handle((req, res) => {
