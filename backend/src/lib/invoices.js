@@ -8,7 +8,8 @@
 //    previews or drafts.
 //  - Before a number is taken, the template is test-filled with the preview
 //    number, so a broken template fails *before* any number is used.
-//  - Allocation and the invoice row are written in one IMMEDIATE transaction:
+//  - Allocation and the invoice row are written in one transaction, with the
+//    series row locked (SELECT … FOR UPDATE):
 //    concurrent conversions (several phones) get distinct, consecutive numbers,
 //    and a number always belongs to an invoice row — no gaps.
 //  - Regenerate and re-download keep the same number (and invoice date).
@@ -29,25 +30,25 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-function getBill(orgId, billId) {
-  const b = db.prepare("SELECT * FROM bills WHERE id = ? AND organization_id = ?").get(billId, orgId);
+async function getBill(orgId, billId) {
+  const b = await db.get("SELECT * FROM bills WHERE id = ? AND organization_id = ?", billId, orgId);
   if (!b) throw notFound("Bill not found");
   return b;
 }
 
-function invoiceForBill(orgId, billId) {
-  return db.prepare("SELECT * FROM invoices WHERE organization_id = ? AND bill_id = ?").get(orgId, billId);
+async function invoiceForBill(orgId, billId) {
+  return db.get("SELECT * FROM invoices WHERE organization_id = ? AND bill_id = ?", orgId, billId);
 }
 
-function getInvoice(orgId, id) {
-  const inv = db.prepare("SELECT * FROM invoices WHERE id = ? AND organization_id = ?").get(id, orgId);
+async function getInvoice(orgId, id) {
+  const inv = await db.get("SELECT * FROM invoices WHERE id = ? AND organization_id = ?", id, orgId);
   if (!inv) throw notFound("Invoice not found");
   return inv;
 }
 
 /** Bill lines as the conversion engine needs them; incomplete lines are an error, not a guess. */
-function billLines(billId) {
-  const rows = db.prepare("SELECT * FROM bill_line_items WHERE bill_id = ? ORDER BY position").all(billId);
+async function billLines(billId) {
+  const rows = await db.all("SELECT * FROM bill_line_items WHERE bill_id = ? ORDER BY position", billId);
   if (!rows.length) throw badRequest("This bill has no line items. Add at least one on the review screen.");
   return rows.map((r, i) => {
     if (r.qty === null || r.original_rate === null)
@@ -61,26 +62,26 @@ function billLines(billId) {
  * the bill's recipient, then the only/first one; the first rule; the default template;
  * the first issuing identity.
  */
-function resolveChoices(orgId, bill, input = {}, existing = null) {
-  const pick = (table, id, what, extra = "") => {
+async function resolveChoices(orgId, bill, input = {}, existing = null) {
+  const pick = async (table, id, what, extra = "") => {
     if (id) {
-      const row = db.prepare(`SELECT * FROM ${table} WHERE id = ? AND organization_id = ?`).get(id, orgId);
+      const row = await db.get(`SELECT * FROM ${table} WHERE id = ? AND organization_id = ?`, id, orgId);
       if (!row) throw badRequest(`That ${what} does not exist in your account`);
       return row;
     }
-    return db.prepare(`SELECT * FROM ${table} WHERE organization_id = ? ${extra} ORDER BY created_at LIMIT 1`).get(orgId) || null;
+    return (await db.get(`SELECT * FROM ${table} WHERE organization_id = ? ${extra} ORDER BY created_at LIMIT 1`, orgId)) || null;
   };
-  const recipient = pick("recipients", input.recipientId || existing?.recipient_id || bill.recipient_id, "client");
-  const rule = pick("conversion_rule_profiles", input.conversionRuleId || existing?.conversion_rule_id || bill.conversion_rule_id, "conversion rule");
+  const recipient = await pick("recipients", input.recipientId || existing?.recipient_id || bill.recipient_id, "client");
+  const rule = await pick("conversion_rule_profiles", input.conversionRuleId || existing?.conversion_rule_id || bill.conversion_rule_id, "conversion rule");
   let template;
   const templateId = input.templateId || existing?.template_id;
-  if (templateId) template = pick("templates", templateId, "template");
-  else template = db.prepare("SELECT * FROM templates WHERE organization_id = ? AND status = 'ready' ORDER BY is_default DESC, created_at LIMIT 1").get(orgId) || null;
+  if (templateId) template = await pick("templates", templateId, "template");
+  else template = (await db.get("SELECT * FROM templates WHERE organization_id = ? AND status = 'ready' ORDER BY is_default DESC, created_at LIMIT 1", orgId)) || null;
   // The identity (and so the number series) is fixed once a number is issued.
   const identityId = existing ? existing.issuing_identity_id : input.issuingIdentityId || null;
-  if (identityId && !db.prepare("SELECT id FROM issuing_identities WHERE id = ? AND organization_id = ?").get(identityId, orgId))
+  if (identityId && !(await db.get("SELECT id FROM issuing_identities WHERE id = ? AND organization_id = ?", identityId, orgId)))
     throw badRequest("That issuing identity does not exist in your account");
-  const identity = issuingIdentityFor(orgId, identityId);
+  const identity = await issuingIdentityFor(orgId, identityId);
 
   if (!recipient) throw badRequest("Add a client (Settings → Clients) before converting a bill.");
   if (!rule) throw badRequest("Add a conversion rule (Settings → Conversion rules) before converting a bill.");
@@ -96,8 +97,8 @@ const valuesFor = (bill, lines, ch, invoiceNo, invoiceDate) => computeValues({
   lines,
 });
 
-function filenameFor(orgId, bill, ch, invoiceNo, seq, seriesRow) {
-  const row = db.prepare("SELECT pattern_string FROM filename_patterns WHERE organization_id = ?").get(orgId);
+async function filenameFor(orgId, bill, ch, invoiceNo, seq, seriesRow) {
+  const row = await db.get("SELECT pattern_string FROM filename_patterns WHERE organization_id = ?", orgId);
   const pattern = row ? row.pattern_string : DEFAULT_PATTERN;
   const padded = seq != null && seriesRow ? String(seq).padStart(seriesRow.padding, "0") : "";
   const values = {
@@ -113,18 +114,18 @@ function filenameFor(orgId, bill, ch, invoiceNo, seq, seriesRow) {
 }
 
 /** What converting would produce, without taking a number. */
-function preview(orgId, billId, input) {
-  const bill = getBill(orgId, billId);
-  const existing = invoiceForBill(orgId, billId);
-  const ch = resolveChoices(orgId, bill, input, existing);
-  const lines = billLines(bill.id);
+async function preview(orgId, billId, input) {
+  const bill = await getBill(orgId, billId);
+  const existing = await invoiceForBill(orgId, billId);
+  const ch = await resolveChoices(orgId, bill, input, existing);
+  const lines = await billLines(bill.id);
   let invoiceNo, mode, seriesRow = null;
   if (existing) {
     invoiceNo = existing.invoice_no;
     mode = "kept";
-    seriesRow = existing.series_id ? db.prepare("SELECT * FROM invoice_number_series WHERE id = ?").get(existing.series_id) : null;
+    seriesRow = existing.series_id ? await db.get("SELECT * FROM invoice_number_series WHERE id = ?", existing.series_id) : null;
   } else {
-    seriesRow = resolveSeries(orgId, ch.identity.id);
+    seriesRow = await resolveSeries(orgId, ch.identity.id);
     if (!seriesRow) throw badRequest("Set up invoice numbering (Settings → Invoice numbering) before converting a bill.");
     invoiceNo = previewNext(rowToCfg(seriesRow));
     mode = seriesRow.mode;
@@ -135,7 +136,7 @@ function preview(orgId, billId, input) {
     bill, existing, ch, lines, seriesRow, values,
     public: {
       invoiceNo, numberMode: mode, invoiceDate,
-      filename: filenameFor(orgId, bill, ch, invoiceNo, existing ? existing.seq : invoiceNo ? rowToCfg(seriesRow).nextNumber : null, seriesRow),
+      filename: await filenameFor(orgId, bill, ch, invoiceNo, existing ? existing.seq : invoiceNo ? rowToCfg(seriesRow).nextNumber : null, seriesRow),
       recipientId: ch.recipient.id, conversionRuleId: ch.rule.id, templateId: ch.template.id, issuingIdentityId: ch.identity.id,
       templateName: ch.template.name, currency: values.Currency,
       subtotal: values.Subtotal, taxLabel: values.TaxLabel, taxRate: values.TaxRate, taxAmount: values.TaxAmount, grandTotal: values.GrandTotal,
@@ -147,36 +148,34 @@ function preview(orgId, billId, input) {
 
 /** Renders Word + PDF for an invoice row that already holds its number. */
 async function renderInto(orgId, invoiceId, bill, ch, values, filename) {
-  const old = db.prepare("SELECT docx_storage_key, pdf_storage_key FROM invoices WHERE id = ?").get(invoiceId);
+  const old = await db.get("SELECT docx_storage_key, pdf_storage_key FROM invoices WHERE id = ?", invoiceId);
   try {
     const { docx, version, logo } = await render.renderDocx(ch.template, values, ch.identity.logo);
     const { pdf: pdfBuf, error: pdfError } = await pdf.toPdf({ docx, template: ch.template, values, logo });
-    const docxKey = storage.save(orgId, docx, "docx", "invoices");
-    const pdfKey = pdfBuf ? storage.save(orgId, pdfBuf, "pdf", "invoices") : null;
-    db.prepare(
-      `UPDATE invoices SET status = 'ready', error = NULL, docx_storage_key = ?, pdf_storage_key = ?, pdf_error = ?,
+    const docxKey = await storage.save(orgId, docx, "docx", "invoices");
+    const pdfKey = pdfBuf ? await storage.save(orgId, pdfBuf, "pdf", "invoices") : null;
+    await db.run(`UPDATE invoices SET status = 'ready', error = NULL, docx_storage_key = ?, pdf_storage_key = ?, pdf_error = ?,
          template_id = ?, template_version = ?, template_name = ?, recipient_id = ?, conversion_rule_id = ?,
          values_json = ?, currency_code = ?, subtotal = ?, tax_amount = ?, grand_total = ?, filename_base = ?,
-         generation_count = generation_count + 1, generated_at = datetime('now'), bill_reviewed_at = ?, updated_at = datetime('now')
-       WHERE id = ?`
-    ).run(docxKey, pdfKey, pdfError, ch.template.id, version, ch.template.name, ch.recipient.id, ch.rule.id,
+         generation_count = generation_count + 1, generated_at = utc_now(), bill_reviewed_at = ?, updated_at = utc_now()
+       WHERE id = ?`, docxKey, pdfKey, pdfError, ch.template.id, version, ch.template.name, ch.recipient.id, ch.rule.id,
       JSON.stringify(values), values.Currency, values.Subtotal, values.TaxAmount, values.GrandTotal, filename, bill.reviewed_at, invoiceId);
-    if (old?.docx_storage_key) storage.remove(old.docx_storage_key);
-    if (old?.pdf_storage_key) storage.remove(old.pdf_storage_key);
+    await storage.remove(old?.docx_storage_key);
+    await storage.remove(old?.pdf_storage_key);
   } catch (e) {
     const message = e.name === "TemplateError" || e instanceof HttpError ? e.message : "The invoice document could not be made";
     if (!(e.name === "TemplateError" || e instanceof HttpError)) console.error("Invoice render failed:", e);
-    db.prepare("UPDATE invoices SET status = 'failed', error = ?, updated_at = datetime('now') WHERE id = ?").run(message, invoiceId);
+    await db.run("UPDATE invoices SET status = 'failed', error = ?, updated_at = utc_now() WHERE id = ?", message, invoiceId);
   }
 }
 
 /** POST /api/bills/:id/convert */
 async function generate(orgId, userId, billId, input) {
-  const bill = getBill(orgId, billId);
+  const bill = await getBill(orgId, billId);
   if (bill.status !== "draft") throw new HttpError(409, "Review and save this bill before converting it.");
-  const already = invoiceForBill(orgId, billId);
+  const already = await invoiceForBill(orgId, billId);
   if (already) throw new HttpError(409, `This bill is already invoice ${already.invoice_no || "(number left blank)"}. Use Regenerate to make it again with the same number.`, { invoiceId: already.id });
-  const p = preview(orgId, billId, input);
+  const p = await preview(orgId, billId, input);
 
   // Test-fill the template before any number is taken (no gaps from broken templates).
   await render.renderDocx(p.ch.template, p.values, p.ch.identity.logo);
@@ -185,40 +184,40 @@ async function generate(orgId, userId, billId, input) {
   const date = new Date();
   let allocated;
   try {
-    allocated = db.transaction(() => {
-      if (invoiceForBill(orgId, billId)) throw new HttpError(409, "This bill was converted on another device a moment ago.");
-      const series = resolveSeries(orgId, p.ch.identity.id);
+    allocated = await db.tx(async () => {
+      if (await invoiceForBill(orgId, billId)) throw new HttpError(409, "This bill was converted on another device a moment ago.");
+      const series = await resolveSeries(orgId, p.ch.identity.id);
       if (!series) throw badRequest("Set up invoice numbering before converting a bill.");
-      const { invoiceNo, seq } = allocateNext(orgId, series.id, date);
-      db.prepare(
-        `INSERT INTO invoices (id, organization_id, bill_id, issuing_identity_id, series_id, invoice_no, seq, invoice_date,
+      const { invoiceNo, seq } = await allocateNext(orgId, series.id, date);
+      await db.run(`INSERT INTO invoices (id, organization_id, bill_id, issuing_identity_id, series_id, invoice_no, seq, invoice_date,
            recipient_id, conversion_rule_id, template_id, status, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generating', ?)`
-      ).run(invoiceId, orgId, billId, p.ch.identity.id, series.id, invoiceNo, seq, today(),
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generating', ?)`, invoiceId, orgId, billId, p.ch.identity.id, series.id, invoiceNo, seq, today(),
         p.ch.recipient.id, p.ch.rule.id, p.ch.template.id, userId);
       return { invoiceNo, seq, series };
-    }).immediate();
+    });
   } catch (e) {
-    if (String(e.code).startsWith("SQLITE_CONSTRAINT")) throw new HttpError(409, "This bill was converted on another device a moment ago.");
+    // Two taps / two phones on the same bill: the second insert hits the
+    // one-invoice-per-bill constraint and its transaction (and number) rolls back.
+    if (db.isUniqueViolation(e)) throw new HttpError(409, "This bill was converted on another device a moment ago.");
     throw e;
   }
 
   const values = valuesFor(bill, p.lines, p.ch, allocated.invoiceNo, today());
-  const filename = filenameFor(orgId, bill, p.ch, allocated.invoiceNo, allocated.seq, allocated.series);
+  const filename = await filenameFor(orgId, bill, p.ch, allocated.invoiceNo, allocated.seq, allocated.series);
   await renderInto(orgId, invoiceId, bill, p.ch, values, filename);
   return getInvoice(orgId, invoiceId);
 }
 
 /** POST /api/invoices/:id/regenerate — same number and date; current bill data; optional new client/rule/template. */
 async function regenerate(orgId, invoiceId, input) {
-  const inv = getInvoice(orgId, invoiceId);
-  const bill = getBill(orgId, inv.bill_id);
+  const inv = await getInvoice(orgId, invoiceId);
+  const bill = await getBill(orgId, inv.bill_id);
   if (bill.status !== "draft") throw new HttpError(409, "Review and save the bill before regenerating its invoice.");
-  const ch = resolveChoices(orgId, bill, input, inv);
-  const lines = billLines(bill.id);
+  const ch = await resolveChoices(orgId, bill, input, inv);
+  const lines = await billLines(bill.id);
   const values = valuesFor(bill, lines, ch, inv.invoice_no, inv.invoice_date);
-  const series = inv.series_id ? db.prepare("SELECT * FROM invoice_number_series WHERE id = ?").get(inv.series_id) : null;
-  const filename = filenameFor(orgId, bill, ch, inv.invoice_no, inv.seq, series);
+  const series = inv.series_id ? await db.get("SELECT * FROM invoice_number_series WHERE id = ?", inv.series_id) : null;
+  const filename = await filenameFor(orgId, bill, ch, inv.invoice_no, inv.seq, series);
   await renderInto(orgId, inv.id, bill, ch, values, filename);
   return getInvoice(orgId, inv.id);
 }
@@ -227,18 +226,18 @@ async function regenerate(orgId, invoiceId, input) {
 async function ensurePdf(orgId, inv) {
   // Only LibreOffice can make an exact PDF later from the stored Word file.
   if (inv.pdf_storage_key || !inv.docx_storage_key || pdf.capabilities().engine !== "libreoffice") return inv;
-  const { pdf: buf, error } = await pdf.toPdf({ docx: storage.read(inv.docx_storage_key), template: { source: "uploaded" }, values: {}, logo: null });
+  const { pdf: buf, error } = await pdf.toPdf({ docx: await storage.read(inv.docx_storage_key), template: { source: "uploaded" }, values: {}, logo: null });
   if (!buf) {
-    db.prepare("UPDATE invoices SET pdf_error = ? WHERE id = ?").run(error, inv.id);
+    await db.run("UPDATE invoices SET pdf_error = ? WHERE id = ?", error, inv.id);
     return getInvoice(orgId, inv.id);
   }
-  const key = storage.save(orgId, buf, "pdf", "invoices");
-  db.prepare("UPDATE invoices SET pdf_storage_key = ?, pdf_error = NULL WHERE id = ?").run(key, inv.id);
+  const key = await storage.save(orgId, buf, "pdf", "invoices");
+  await db.run("UPDATE invoices SET pdf_storage_key = ?, pdf_error = NULL WHERE id = ?", key, inv.id);
   return getInvoice(orgId, inv.id);
 }
 
-function toApi(inv) {
-  const bill = db.prepare("SELECT vendor_name, original_bill_no, original_date, updated_at, reviewed_at FROM bills WHERE id = ?").get(inv.bill_id) || {};
+async function toApi(inv) {
+  const bill = (await db.get("SELECT vendor_name, original_bill_no, original_date, updated_at, reviewed_at FROM bills WHERE id = ?", inv.bill_id)) || {};
   const values = inv.values_json ? JSON.parse(inv.values_json) : null;
   return {
     id: inv.id,
@@ -277,8 +276,8 @@ function toApi(inv) {
 }
 
 /** At startup: an invoice left "generating" by a crash keeps its number and can be regenerated. */
-function recoverInterrupted() {
-  db.prepare("UPDATE invoices SET status = 'failed', error = 'Making the files was interrupted. Tap Regenerate.' WHERE status = 'generating'").run();
+async function recoverInterrupted() {
+  await db.run("UPDATE invoices SET status = 'failed', error = 'Making the files was interrupted. Tap Regenerate.' WHERE status = 'generating'");
 }
 
 module.exports = { recoverInterrupted, preview, generate, regenerate, ensurePdf, getInvoice, invoiceForBill, toApi };

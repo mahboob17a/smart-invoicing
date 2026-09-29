@@ -1,10 +1,13 @@
 // Test harness: each test file runs in its own process (node --test), with a
-// fresh in-memory database and a temp upload folder.
+// fresh in-memory Postgres (PGlite) and a temp upload folder.
+// TEST_DATABASE_URL runs the suite against a real PostgreSQL server instead.
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
 
-process.env.DATABASE_FILE = ":memory:";
+if (process.env.TEST_DATABASE_URL) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+else { delete process.env.DATABASE_URL; process.env.DATABASE_DIR = "memory"; }
+delete process.env.STORAGE_DRIVER;
 process.env.JWT_SECRET = "test-secret-" + Math.random();
 process.env.UPLOAD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "si-uploads-"));
 
@@ -12,6 +15,7 @@ const app = require("../src/app");
 
 let server, base;
 async function start() {
+  await require("../src/db").ready;
   await new Promise((r) => (server = app.listen(0, r)));
   base = `http://127.0.0.1:${server.address().port}`;
   return base;
@@ -38,10 +42,11 @@ async function call(method, url, { token, body, raw, headers = {} } = {}) {
 }
 
 let n = 0;
+const RUN = Math.random().toString(36).slice(2, 8); // unique emails when a real database is reused
 async function newOrg(label = "Org") {
   n += 1;
   const r = await call("POST", "/api/auth/signup", {
-    body: { organizationName: `${label} ${n} LLC`, name: `User ${n}`, email: `user${n}.${label.toLowerCase()}@example.com`, password: "correcthorse123" },
+    body: { organizationName: `${label} ${n} LLC`, name: `User ${n}`, email: `user${n}.${label.toLowerCase()}.${RUN}@example.com`, password: "correcthorse123" },
   });
   if (r.status !== 201) throw new Error("signup failed: " + JSON.stringify(r.body));
   return r.body.token;

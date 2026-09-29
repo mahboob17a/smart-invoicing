@@ -85,6 +85,34 @@ they can still be corrected and regenerated.
 libreoffice.org and restart the backend. The startup message says which PDF
 engine is in use.
 
+## Hosting: Render (backend) + Supabase (database and files)
+
+The backend runs on **Render** as a Docker service (with LibreOffice for PDFs);
+**Supabase** provides the PostgreSQL database and private file storage. On your
+PC nothing changes: `start-backend.bat` runs a local Postgres (PGlite) inside
+the backend, with its data in `backend/.pgdata`.
+
+1. **Supabase** (supabase.com): create a project in the same region you will use
+   on Render (e.g. Singapore). Keep the database password somewhere safe.
+   - Connect → **Session pooler** → copy the connection string (port 5432) and
+     put your password in it. This is `DATABASE_URL`.
+   - Project Settings → API: copy the **Project URL** (`SUPABASE_URL`) and the
+     **service_role / secret key** (`SUPABASE_SERVICE_ROLE_KEY`). This key is
+     server-only; never put it in the app or share it.
+2. **GitHub**: push this repository (`git push origin main`).
+3. **Render** (render.com): New + → **Blueprint** → choose this repository.
+   Render reads `render.yaml`, then asks for `DATABASE_URL`, `SUPABASE_URL`,
+   `SUPABASE_SERVICE_ROLE_KEY` and optionally `OPENAI_API_KEY`. `JWT_SECRET` is
+   generated for you. The first build takes about 10 minutes.
+4. Open `https://<your-service>.onrender.com/health` — it should show `{"ok":true,...}`.
+   The tables and the storage bucket are created on first start.
+5. **Phone**: double-click `start-phone-cloud.bat`, paste the Render address once,
+   and scan the QR code in Expo Go. The app reaches your PC through an Expo
+   tunnel and the backend over the internet, so Wi-Fi and firewall settings don't matter.
+
+The free Render plan sleeps after 15 minutes without use; the first request then
+takes up to a minute. The Starter plan stays awake.
+
 ## Run the backend
 
 Needs Node.js 22 or newer.

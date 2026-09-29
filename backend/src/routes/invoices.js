@@ -18,31 +18,31 @@ const TYPES = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-router.get("/", handle((req, res) => {
+router.get("/", handle(async (req, res) => {
   const args = [req.organizationId];
   let where = "i.organization_id = ?";
   if (req.query.q) {
-    where += " AND (i.invoice_no LIKE ? OR b.vendor_name LIKE ? OR b.original_bill_no LIKE ?)";
+    where += " AND (i.invoice_no ILIKE ? OR b.vendor_name ILIKE ? OR b.original_bill_no ILIKE ?)";
     const q = `%${req.query.q}%`;
     args.push(q, q, q);
   }
-  const rows = db.prepare(`SELECT i.* FROM invoices i JOIN bills b ON b.id = i.bill_id WHERE ${where} ORDER BY i.created_at DESC LIMIT 200`).all(...args);
-  res.json(rows.map(invoices.toApi));
+  const rows = await db.all(`SELECT i.* FROM invoices i JOIN bills b ON b.id = i.bill_id WHERE ${where} ORDER BY i.created_at DESC LIMIT 200`, ...args);
+  res.json(await Promise.all(rows.map(invoices.toApi)));
 }));
 
-router.get("/capabilities", handle((req, res) => res.json(pdf.capabilities())));
+router.get("/capabilities", handle(async (req, res) => res.json(pdf.capabilities())));
 
-router.get("/:id", handle((req, res) => {
-  res.json(invoices.toApi(invoices.getInvoice(req.organizationId, req.params.id)));
+router.get("/:id", handle(async (req, res) => {
+  res.json(await invoices.toApi(await invoices.getInvoice(req.organizationId, req.params.id)));
 }));
 
 router.post("/:id/regenerate", handle(async (req, res) => {
-  res.json(invoices.toApi(await invoices.regenerate(req.organizationId, req.params.id, req.body || {})));
+  res.json(await invoices.toApi(await invoices.regenerate(req.organizationId, req.params.id, req.body || {})));
 }));
 
 router.get("/:id/file", handle(async (req, res) => {
   const format = req.query.format === "docx" ? "docx" : "pdf";
-  let inv = invoices.getInvoice(req.organizationId, req.params.id);
+  let inv = await invoices.getInvoice(req.organizationId, req.params.id);
   if (inv.status !== "ready") throw new HttpError(409, inv.error || "This invoice is not ready yet. Try Regenerate.");
   if (format === "pdf") inv = await invoices.ensurePdf(req.organizationId, inv);
   const key = format === "pdf" ? inv.pdf_storage_key : inv.docx_storage_key;
@@ -50,7 +50,7 @@ router.get("/:id/file", handle(async (req, res) => {
   const name = `${inv.filename_base || "invoice"}.${format}`;
   res.set("Content-Disposition", `attachment; filename="${name.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(name)}`);
   res.set("X-Filename", encodeURIComponent(name));
-  res.type(TYPES[format]).send(storage.read(key));
+  res.type(TYPES[format]).send(await storage.read(key));
 }));
 
 module.exports = router;

@@ -76,7 +76,7 @@ test("original image is served only through the authenticated bill route", async
   assert.equal((await call("GET", first.files[0].url)).status, 401);
   assert.equal((await call("GET", first.files[0].url, { token: B })).status, 404);
   const db = require("../src/db");
-  const key = db.prepare("SELECT storage_key FROM bill_files WHERE bill_id = ?").get(first.id).storage_key;
+  const key = (await db.get("SELECT storage_key FROM bill_files WHERE bill_id = ?", first.id)).storage_key;
   assert.equal((await call("GET", `/uploads/${key}`)).status, 404, "not reachable through the public logo path");
 });
 
@@ -99,7 +99,7 @@ test("review save validates, recomputes amounts, clears flags and keeps the AI r
   assert.equal(r.body.items[0].amount, 31.5);
   assert.equal(r.body.itemsTotal, 90.75);
   const db = require("../src/db");
-  const row = db.prepare("SELECT extraction_json, vendor_id FROM bills WHERE id = ?").get(first.id);
+  const row = await db.get("SELECT extraction_json, vendor_id FROM bills WHERE id = ?", first.id);
   assert.equal(JSON.parse(row.extraction_json).line_items[0].quantity, 6, "original AI reading is preserved");
   assert.ok(row.vendor_id);
 });
@@ -198,11 +198,11 @@ test("delete removes the bill and its files", async () => {
   assert.equal((await call("GET", first.files[0].url, { token: A })).status, 404);
 });
 
-test("bills left mid-reading by a restart are released", () => {
+test("bills left mid-reading by a restart are released", async () => {
   const db = require("../src/db");
   const { recoverInterrupted } = require("../src/lib/bills");
-  const id = db.prepare("SELECT id FROM bills LIMIT 1").get().id;
-  db.prepare("UPDATE bills SET status = 'processing' WHERE id = ?").run(id);
-  recoverInterrupted();
-  assert.equal(db.prepare("SELECT status FROM bills WHERE id = ?").get(id).status, "failed");
+  const id = (await db.get("SELECT id FROM bills LIMIT 1")).id;
+  await db.run("UPDATE bills SET status = 'processing' WHERE id = ?", id);
+  await recoverInterrupted();
+  assert.equal((await db.get("SELECT status FROM bills WHERE id = ?", id)).status, "failed");
 });

@@ -50,11 +50,11 @@ function computeValues({ identity, recipient, rule, invoiceNo, invoiceDate, bill
  * The letterhead an invoice is issued under: the given issuing identity, or the
  * organization's first one (live company profile if it is "same as company").
  */
-function issuingIdentityFor(orgId, identityId = null) {
-  const cp = db.prepare("SELECT * FROM company_profiles WHERE organization_id = ?").get(orgId);
+async function issuingIdentityFor(orgId, identityId = null) {
+  const cp = await db.get("SELECT * FROM company_profiles WHERE organization_id = ?", orgId);
   const id = identityId
-    ? db.prepare("SELECT * FROM issuing_identities WHERE id = ? AND organization_id = ?").get(identityId, orgId)
-    : db.prepare("SELECT * FROM issuing_identities WHERE organization_id = ? ORDER BY created_at LIMIT 1").get(orgId);
+    ? await db.get("SELECT * FROM issuing_identities WHERE id = ? AND organization_id = ?", identityId, orgId)
+    : await db.get("SELECT * FROM issuing_identities WHERE organization_id = ? ORDER BY created_at LIMIT 1", orgId);
   const src = !id || id.same_as_company ? cp : id;
   return {
     id: id?.id || null,
@@ -67,13 +67,13 @@ function issuingIdentityFor(orgId, identityId = null) {
 }
 
 /** Sample values using the organization's own letterhead, client, rule and numbering. */
-function sampleValues(orgId) {
-  const identity = issuingIdentityFor(orgId);
-  const recipient = db.prepare("SELECT * FROM recipients WHERE organization_id = ? ORDER BY created_at LIMIT 1").get(orgId)
+async function sampleValues(orgId) {
+  const identity = await issuingIdentityFor(orgId);
+  const recipient = (await db.get("SELECT * FROM recipients WHERE organization_id = ? ORDER BY created_at LIMIT 1", orgId))
     || { name: "Sample Client LLC", address: "P.O. Box 100, Muscat", tax_no: "OM1100000000" };
-  const rule = db.prepare("SELECT * FROM conversion_rule_profiles WHERE organization_id = ? ORDER BY created_at LIMIT 1").get(orgId)
+  const rule = (await db.get("SELECT * FROM conversion_rule_profiles WHERE organization_id = ? ORDER BY created_at LIMIT 1", orgId))
     || { markup_pct: 15, tax_pct: 5, tax_label: "VAT", currency_code: "OMR", decimal_places: 3 };
-  const series = resolveSeries(orgId, identity.id);
+  const series = await resolveSeries(orgId, identity.id);
   const invoiceNo = series ? previewNext(rowToCfg(series)) : "INV-0001";
   const today = new Date().toISOString().slice(0, 10);
   const values = computeValues({

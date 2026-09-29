@@ -9,12 +9,17 @@ const app = express();
 app.use(cors({ exposedHeaders: ["Content-Disposition", "X-Filename"] }));
 app.use(express.json({ limit: "1mb" }));
 
-app.get("/health", (req, res) => res.json({ ok: true, service: "smart-invoicing-backend" }));
-// Only company logos are public. Bill images live under the same folder but are
-// served by GET /api/bills/:id/files/:fileId to signed-in users of that organization.
-app.use("/uploads", (req, res, next) =>
-  /^\/[0-9a-f-]{36}\/logo-[0-9a-f-]{36}\.(png|jpg|webp)$/.test(req.path) ? next() : res.status(404).json({ error: "Not found" }));
-app.use("/uploads", express.static(uploads.UPLOAD_ROOT, { fallthrough: false, maxAge: "7d" }));
+app.get("/health", async (req, res) => {
+  try {
+    await require("./db").get("SELECT 1 AS ok");
+    res.json({ ok: true, service: "smart-invoicing-backend" });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: "Database not reachable" });
+  }
+});
+// Only company logos are public. Bill images, templates and invoices are
+// served by their own routes to signed-in users of the same organization.
+app.use("/uploads", uploads.serveLogo);
 
 // Public
 app.use("/api/auth", require("./routes/auth"));

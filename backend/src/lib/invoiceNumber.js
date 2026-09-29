@@ -92,40 +92,32 @@ function previewNext(cfg, date = new Date()) {
 
 /**
  * Atomically assigns the next invoice number in a series. SQLite serialises
- * write transactions, so two conversions at the same moment cannot receive the
- * same number. (PostgreSQL port: SELECT ... FOR UPDATE on the series row.)
+ * same number: the series row is locked (SELECT … FOR UPDATE) until the
+ * surrounding transaction commits, and a rollback gives the number back.
  * Returns { invoiceNo, seq } — invoiceNo is null in Blank mode.
  */
 function allocateNext(organizationId, seriesId, date = new Date()) {
-  return db.transaction(() => {
-    const row = db
-      .prepare("SELECT * FROM invoice_number_series WHERE id = ? AND organization_id = ?")
-      .get(seriesId, organizationId);
+  return db.tx(async () => {
+    const row = await db.get("SELECT * FROM invoice_number_series WHERE id = ? AND organization_id = ? FOR UPDATE", seriesId, organizationId);
     if (!row) throw Object.assign(new Error("Numbering series not found"), { status: 404 });
     const cfg = rowToCfg(row);
     if (cfg.mode === "blank") return { invoiceNo: null, seq: null };
     const { seq, key } = nextSeqFor(cfg, date);
-    db.prepare(
-      `UPDATE invoice_number_series
-       SET next_number = ?, last_issued_number = ?, period_key = ?, updated_at = datetime('now')
-       WHERE id = ?`
-    ).run(seq + 1, seq, key, row.id);
+    await db.run(`UPDATE invoice_number_series
+       SET next_number = ?, last_issued_number = ?, period_key = ?, updated_at = utc_now()
+       WHERE id = ?`, seq + 1, seq, key, row.id);
     return { invoiceNo: formatNumber(cfg, seq, date), seq };
-  }).immediate();
+  });
 }
 
 /** The series that applies to invoices issued under a given identity. */
-function resolveSeries(organizationId, issuingIdentityId) {
-  const org = db.prepare("SELECT invoice_numbering_scope FROM organizations WHERE id = ?").get(organizationId);
+async function resolveSeries(organizationId, issuingIdentityId) {
+  const org = await db.get("SELECT invoice_numbering_scope FROM organizations WHERE id = ?", organizationId);
   if (org && org.invoice_numbering_scope === "per_identity" && issuingIdentityId) {
-    const own = db
-      .prepare("SELECT * FROM invoice_number_series WHERE organization_id = ? AND issuing_identity_id = ?")
-      .get(organizationId, issuingIdentityId);
+    const own = await db.get("SELECT * FROM invoice_number_series WHERE organization_id = ? AND issuing_identity_id = ?", organizationId, issuingIdentityId);
     if (own) return own;
   }
-  return db
-    .prepare("SELECT * FROM invoice_number_series WHERE organization_id = ? AND issuing_identity_id IS NULL")
-    .get(organizationId);
+  return await db.get("SELECT * FROM invoice_number_series WHERE organization_id = ? AND issuing_identity_id IS NULL", organizationId);
 }
 
 module.exports = { PLACEHOLDERS, validateConfig, formatNumber, previewNext, allocateNext, resolveSeries, rowToCfg, periodKey };

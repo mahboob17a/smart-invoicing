@@ -34,29 +34,29 @@ const upload = multer({
   },
 });
 
-function getBill(id, orgId) {
-  const b = db.prepare("SELECT * FROM bills WHERE id = ? AND organization_id = ?").get(id, orgId);
+async function getBill(id, orgId) {
+  const b = await db.get("SELECT * FROM bills WHERE id = ? AND organization_id = ?", id, orgId);
   if (!b) throw notFound("Bill not found");
   return b;
 }
 
-function itemsOf(billId) {
-  return db.prepare("SELECT * FROM bill_line_items WHERE bill_id = ? ORDER BY position").all(billId).map((i) => ({
+async function itemsOf(billId) {
+  return (await db.all("SELECT * FROM bill_line_items WHERE bill_id = ? ORDER BY position", billId)).map((i) => ({
     id: i.id, description: i.description, qty: i.qty, unit: i.unit, rate: i.original_rate, amount: i.amount,
     flagged: !!i.flagged_unclear, reason: i.flag_reason,
   }));
 }
 
-function filesOf(bill) {
-  return db.prepare("SELECT id, mime_type, size_bytes, page_index FROM bill_files WHERE bill_id = ? ORDER BY page_index").all(bill.id)
+async function filesOf(bill) {
+  return (await db.all("SELECT id, mime_type, size_bytes, page_index FROM bill_files WHERE bill_id = ? ORDER BY page_index", bill.id))
     .map((f) => ({ id: f.id, mimeType: f.mime_type, sizeBytes: f.size_bytes, page: f.page_index + 1, url: `/api/bills/${bill.id}/files/${f.id}` }));
 }
 
-function summaryOf(b) {
-  const items = db.prepare("SELECT COUNT(*) n, SUM(amount) total, SUM(flagged_unclear) flagged FROM bill_line_items WHERE bill_id = ?").get(b.id);
-  const first = db.prepare("SELECT id FROM bill_files WHERE bill_id = ? ORDER BY page_index LIMIT 1").get(b.id);
+async function summaryOf(b) {
+  const items = await db.get("SELECT COUNT(*) n, SUM(amount) total, SUM(flagged_unclear) flagged FROM bill_line_items WHERE bill_id = ?", b.id);
+  const first = await db.get("SELECT id FROM bill_files WHERE bill_id = ? ORDER BY page_index LIMIT 1", b.id);
   const flags = JSON.parse(b.flags_json || "{}");
-  const inv = db.prepare("SELECT id, invoice_no, status FROM invoices WHERE bill_id = ?").get(b.id);
+  const inv = await db.get("SELECT id, invoice_no, status FROM invoices WHERE bill_id = ?", b.id);
   return {
     id: b.id,
     status: b.status,
@@ -74,9 +74,9 @@ function summaryOf(b) {
   };
 }
 
-function fullBill(b, orgId) {
+async function fullBill(b, orgId) {
   return {
-    ...summaryOf(b),
+    ...(await summaryOf(b)),
     recipientId: b.recipient_id,
     conversionRuleId: b.conversion_rule_id,
     printedTotal: b.printed_total,
@@ -89,13 +89,13 @@ function fullBill(b, orgId) {
       ms: b.extraction_ms,
     },
     reviewedAt: b.reviewed_at,
-    items: itemsOf(b.id),
-    files: filesOf(b),
-    possibleDuplicates: b.status === "processing" ? [] : findDuplicates(orgId, b),
+    items: await itemsOf(b.id),
+    files: await filesOf(b),
+    possibleDuplicates: b.status === "processing" ? [] : await findDuplicates(orgId, b),
   };
 }
 
-router.post("/", upload.array("files", MAX_FILES), handle((req, res) => {
+router.post("/", upload.array("files", MAX_FILES), handle(async (req, res) => {
   const files = req.files || [];
   if (!files.length) throw badRequest('Attach the bill as multipart field "files"');
   const pdfs = files.filter((f) => f.mimetype === "application/pdf");
@@ -104,31 +104,27 @@ router.post("/", upload.array("files", MAX_FILES), handle((req, res) => {
   const id = randomUUID();
   const saved = [];
   try {
-    db.transaction(() => {
-      db.prepare("INSERT INTO bills (id, organization_id, status, created_by) VALUES (?, ?, 'processing', ?)").run(id, req.organizationId, req.userId);
-      files.forEach((f, i) => {
-        const key = storage.save(req.organizationId, f.buffer, TYPES[f.mimetype]);
-        saved.push(key);
-        db.prepare(
-          "INSERT INTO bill_files (id, bill_id, organization_id, storage_key, mime_type, size_bytes, page_index) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).run(randomUUID(), id, req.organizationId, key, f.mimetype, f.size, i);
-      });
-    })();
+    for (const f of files) saved.push(await storage.save(req.organizationId, f.buffer, TYPES[f.mimetype]));
+    await db.tx(async () => {
+      await db.run("INSERT INTO bills (id, organization_id, status, created_by) VALUES (?, ?, 'processing', ?)", id, req.organizationId, req.userId);
+      for (const [i, f] of files.entries()) {
+        await db.run("INSERT INTO bill_files (id, bill_id, organization_id, storage_key, mime_type, size_bytes, page_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          randomUUID(), id, req.organizationId, saved[i], f.mimetype, f.size, i);
+      }
+    });
   } catch (e) {
-    saved.forEach(storage.remove);
+    await Promise.all(saved.map((k) => storage.remove(k)));
     throw e;
   }
-  startProcessing(id, req.organizationId);
-  res.status(202).json({ ...fullBill(getBill(id, req.organizationId), req.organizationId), aiProvider: providerName() });
+  await startProcessing(id, req.organizationId);
+  res.status(202).json({ ...(await fullBill(await getBill(id, req.organizationId), req.organizationId)), aiProvider: providerName() });
 }));
 
-router.get("/summary", handle((req, res) => {
-  const rows = db.prepare(
-    `SELECT CASE WHEN EXISTS (SELECT 1 FROM invoices i WHERE i.bill_id = bills.id) THEN 'converted' ELSE status END status, COUNT(*) n
-     FROM bills WHERE organization_id = ? GROUP BY 1`
-  ).all(req.organizationId);
+router.get("/summary", handle(async (req, res) => {
+  const rows = await db.all(`SELECT CASE WHEN EXISTS (SELECT 1 FROM invoices i WHERE i.bill_id = bills.id) THEN 'converted' ELSE status END status, COUNT(*) n
+     FROM bills WHERE organization_id = ? GROUP BY 1`, req.organizationId);
   const by = Object.fromEntries(rows.map((r) => [r.status, r.n]));
-  const recent = db.prepare("SELECT * FROM bills WHERE organization_id = ? ORDER BY created_at DESC LIMIT 5").all(req.organizationId);
+  const recent = await db.all("SELECT * FROM bills WHERE organization_id = ? ORDER BY created_at DESC LIMIT 5", req.organizationId);
   res.json({
     processing: by.processing || 0,
     needsReview: (by.needs_review || 0) + (by.failed || 0),
@@ -136,11 +132,11 @@ router.get("/summary", handle((req, res) => {
     converted: by.converted || 0,
     total: rows.reduce((a, r) => a + r.n, 0),
     aiProvider: providerName(),
-    recent: recent.map(summaryOf),
+    recent: await Promise.all(recent.map(summaryOf)),
   });
 }));
 
-router.get("/", handle((req, res) => {
+router.get("/", handle(async (req, res) => {
   const { status, q } = req.query;
   const where = ["organization_id = ?"];
   const args = [req.organizationId];
@@ -150,19 +146,19 @@ router.get("/", handle((req, res) => {
   else if (status === "draft") where.push(`status = 'draft' AND NOT ${converted}`);
   else if (status) { where.push("status = ?"); args.push(String(status)); }
   if (q) {
-    where.push("(vendor_name LIKE ? OR original_bill_no LIKE ? OR EXISTS (SELECT 1 FROM invoices i WHERE i.bill_id = bills.id AND i.invoice_no LIKE ?))");
+    where.push("(vendor_name ILIKE ? OR original_bill_no ILIKE ? OR EXISTS (SELECT 1 FROM invoices i WHERE i.bill_id = bills.id AND i.invoice_no ILIKE ?))");
     args.push(`%${q}%`, `%${q}%`, `%${q}%`);
   }
-  const rows = db.prepare(`SELECT * FROM bills WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT 200`).all(...args);
-  res.json(rows.map(summaryOf));
+  const rows = await db.all(`SELECT * FROM bills WHERE ${where.join(" AND ")} ORDER BY created_at DESC LIMIT 200`, ...args);
+  res.json(await Promise.all(rows.map(summaryOf)));
 }));
 
-router.get("/:id", handle((req, res) => {
-  res.json(fullBill(getBill(req.params.id, req.organizationId), req.organizationId));
+router.get("/:id", handle(async (req, res) => {
+  res.json(await fullBill(await getBill(req.params.id, req.organizationId), req.organizationId));
 }));
 
-router.put("/:id", handle((req, res) => {
-  const bill = getBill(req.params.id, req.organizationId);
+router.put("/:id", handle(async (req, res) => {
+  const bill = await getBill(req.params.id, req.organizationId);
   if (bill.status === "processing") throw new HttpError(409, "This bill is still being read. Wait a moment and try again.");
   const b = req.body || {};
 
@@ -176,7 +172,7 @@ router.put("/:id", handle((req, res) => {
     if (!originalDate) throw badRequest("Enter the bill date as DD-MM-YYYY");
   }
   if (b.recipientId) {
-    const ok = db.prepare("SELECT id FROM recipients WHERE id = ? AND organization_id = ?").get(b.recipientId, req.organizationId);
+    const ok = await db.get("SELECT id FROM recipients WHERE id = ? AND organization_id = ?", b.recipientId, req.organizationId);
     if (!ok) throw badRequest("That client does not exist in your account");
   }
   if (!Array.isArray(b.items) || b.items.length === 0) throw badRequest("Add at least one line item");
@@ -190,61 +186,57 @@ router.put("/:id", handle((req, res) => {
     return { description, qty, unit: typeof it.unit === "string" && it.unit.trim() ? it.unit.trim() : null, rate, amount: round(qty * rate), flagged: false, reason: null };
   });
 
-  db.transaction(() => {
-    const vendorId = upsertVendor(req.organizationId, vendorName);
-    replaceItems(bill.id, req.organizationId, items);
+  await db.tx(async () => {
+    const vendorId = await upsertVendor(req.organizationId, vendorName);
+    await replaceItems(bill.id, req.organizationId, items);
     // The reviewer has checked everything, so extraction flags are cleared.
     // The original AI reading stays in extraction_json (§8.2).
-    db.prepare(
-      `UPDATE bills SET vendor_id = ?, vendor_name = ?, original_bill_no = ?, original_bill_no_key = ?, original_date = ?,
+    await db.run(`UPDATE bills SET vendor_id = ?, vendor_name = ?, original_bill_no = ?, original_bill_no_key = ?, original_date = ?,
          currency_code = COALESCE(?, currency_code), recipient_id = ?, flags_json = '{}', status = 'draft',
-         reviewed_at = strftime('%Y-%m-%d %H:%M:%f', 'now'), reviewed_by = ?, updated_at = datetime('now')
-       WHERE id = ?`
-    ).run(vendorId, vendorName, originalBillNo, billNoKey(originalBillNo), originalDate,
+         reviewed_at = utc_now_ms(), reviewed_by = ?, updated_at = utc_now()
+       WHERE id = ?`, vendorId, vendorName, originalBillNo, billNoKey(originalBillNo), originalDate,
       typeof b.currencyCode === "string" && /^[A-Za-z]{3}$/.test(b.currencyCode) ? b.currencyCode.toUpperCase() : null,
       b.recipientId || null, req.userId, bill.id);
-  })();
-  res.json(fullBill(getBill(bill.id, req.organizationId), req.organizationId));
+  });
+  res.json(await fullBill(await getBill(bill.id, req.organizationId), req.organizationId));
 }));
 
-const hasInvoiceError = (bill, action) => {
-  const inv = invoices.invoiceForBill(bill.organization_id, bill.id);
+const hasInvoiceError = async (bill, action) => {
+  const inv = await invoices.invoiceForBill(bill.organization_id, bill.id);
   if (inv) throw new HttpError(409, `This bill is invoice ${inv.invoice_no || "(number left blank)"}, so it can't be ${action}. Invoices are kept as accounting records.`);
 };
 
-router.post("/:id/extract", handle((req, res) => {
-  const bill = getBill(req.params.id, req.organizationId);
-  hasInvoiceError(bill, "read again");
+router.post("/:id/extract", handle(async (req, res) => {
+  const bill = await getBill(req.params.id, req.organizationId);
+  await hasInvoiceError(bill, "read again");
   if (bill.status === "processing") throw new HttpError(409, "This bill is already being read");
-  startProcessing(bill.id, req.organizationId);
-  res.status(202).json(fullBill(getBill(bill.id, req.organizationId), req.organizationId));
+  await startProcessing(bill.id, req.organizationId);
+  res.status(202).json(await fullBill(await getBill(bill.id, req.organizationId), req.organizationId));
 }));
 
-router.delete("/:id", handle((req, res) => {
-  const bill = getBill(req.params.id, req.organizationId);
-  hasInvoiceError(bill, "deleted");
-  const files = db.prepare("SELECT storage_key FROM bill_files WHERE bill_id = ?").all(bill.id);
-  db.prepare("DELETE FROM bills WHERE id = ?").run(bill.id);
-  files.forEach((f) => storage.remove(f.storage_key));
+router.delete("/:id", handle(async (req, res) => {
+  const bill = await getBill(req.params.id, req.organizationId);
+  await hasInvoiceError(bill, "deleted");
+  const files = await db.all("SELECT storage_key FROM bill_files WHERE bill_id = ?", bill.id);
+  await db.run("DELETE FROM bills WHERE id = ?", bill.id);
+  await Promise.all(files.map((f) => storage.remove(f.storage_key)));
   res.status(204).send();
 }));
 
-router.post("/:id/convert/preview", handle((req, res) => {
-  res.json(invoices.preview(req.organizationId, req.params.id, req.body || {}).public);
+router.post("/:id/convert/preview", handle(async (req, res) => {
+  res.json((await invoices.preview(req.organizationId, req.params.id, req.body || {})).public);
 }));
 
 router.post("/:id/convert", handle(async (req, res) => {
   const inv = await invoices.generate(req.organizationId, req.userId, req.params.id, req.body || {});
-  res.status(201).json(invoices.toApi(inv));
+  res.status(201).json(await invoices.toApi(inv));
 }));
 
-router.get("/:id/files/:fileId", handle((req, res) => {
-  const f = db
-    .prepare("SELECT * FROM bill_files WHERE id = ? AND bill_id = ? AND organization_id = ?")
-    .get(req.params.fileId, req.params.id, req.organizationId);
+router.get("/:id/files/:fileId", handle(async (req, res) => {
+  const f = await db.get("SELECT * FROM bill_files WHERE id = ? AND bill_id = ? AND organization_id = ?", req.params.fileId, req.params.id, req.organizationId);
   if (!f) throw notFound("File not found");
   res.set("Cache-Control", "private, max-age=3600");
-  res.type(f.mime_type).sendFile(storage.absolutePath(f.storage_key));
+  res.type(f.mime_type).send(await storage.read(f.storage_key));
 }));
 
 module.exports = router;

@@ -26,3 +26,5 @@ Thumbs.db
 mobile/android/
 mobile/ios/
 tools/
+backend/.pgdata/
+backend-url.txt

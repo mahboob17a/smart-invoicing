@@ -30,9 +30,10 @@ test("validation rules", () => {
   assert.match(lib.validateConfig({ ...base, padding: 0 }).join(), /Digits/);
 });
 
-test("allocation is sequential and unique", () => {
+test("allocation is sequential and unique", async () => {
   const seen = new Set();
-  for (let i = 0; i < 200; i++) seen.add(lib.allocateNext(orgId(), ids.seriesId).invoiceNo);
+  const org = await orgId();
+  for (let i = 0; i < 200; i++) seen.add((await lib.allocateNext(org, ids.seriesId)).invoiceNo);
   assert.equal(seen.size, 200);
   assert.ok(seen.has("INV-" + new Date().getFullYear() + "-0001"));
   assert.ok(seen.has("INV-" + new Date().getFullYear() + "-0200"));
@@ -63,7 +64,7 @@ test("yearly reset starts again at 1 in a new year", () => {
 test("blank mode assigns no number", async () => {
   const r = await call("PUT", `/api/invoice-numbering/${ids.seriesId}`, { token: T, body: { mode: "blank" } });
   assert.equal(r.body.preview, null);
-  assert.deepEqual(lib.allocateNext(orgId(), ids.seriesId), { invoiceNo: null, seq: null });
+  assert.deepEqual(await lib.allocateNext(await orgId(), ids.seriesId), { invoiceNo: null, seq: null });
 });
 
 test("one series per identity; one shared series per organisation", async () => {
@@ -73,7 +74,7 @@ test("one series per identity; one shared series per organisation", async () => 
   assert.equal(shared.status, 201);
   assert.equal((await call("POST", "/api/invoice-numbering", { token: T, body: {} })).status, 400);
   await call("PUT", "/api/invoice-numbering/scope", { token: T, body: { scope: "shared" } });
-  assert.equal(lib.resolveSeries(orgId(), ids.identityId).prefix, "GEN");
+  assert.equal((await lib.resolveSeries(await orgId(), ids.identityId)).prefix, "GEN");
 });
 
 test("unsaved configuration preview", async () => {
@@ -83,6 +84,6 @@ test("unsaved configuration preview", async () => {
   assert.equal(bad.status, 400);
 });
 
-function orgId() {
-  return require("../src/db").prepare("SELECT organization_id FROM invoice_number_series WHERE id = ?").get(ids.seriesId).organization_id;
+async function orgId() {
+  return (await require("../src/db").get("SELECT organization_id FROM invoice_number_series WHERE id = ?", ids.seriesId)).organization_id;
 }

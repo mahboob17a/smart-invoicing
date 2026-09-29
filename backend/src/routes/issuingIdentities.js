@@ -14,7 +14,7 @@ module.exports = makeListResource(
     { apiField: "addressBlock", dbColumn: "address_block", maxLength: 500 },
     { apiField: "logoAssetUrl", dbColumn: "logo_asset_url", maxLength: 500 },
   ],
-  (row, req) => {
+  async (row, req) => {
     const base = {
       id: row.id,
       sameAsCompany: !!row.same_as_company,
@@ -26,7 +26,7 @@ module.exports = makeListResource(
       createdAt: row.created_at,
     };
     if (!row.same_as_company) return base;
-    const cp = db.prepare("SELECT * FROM company_profiles WHERE organization_id = ?").get(req.organizationId);
+    const cp = await db.get("SELECT * FROM company_profiles WHERE organization_id = ?", req.organizationId);
     if (!cp) return base;
     return {
       ...base,
@@ -39,14 +39,14 @@ module.exports = makeListResource(
   },
   {
     label: "Issuing identity",
-    validate(values, { req }) {
+    async validate(values, { req }) {
       const { badRequest } = require("../lib/http");
       if (!values.same_as_company) {
         if (!values.display_name) throw badRequest("displayName is required unless sameAsCompany is on");
         return;
       }
       // Keep a stored name as a fallback; reads always use the live profile.
-      const cp = db.prepare("SELECT legal_name FROM company_profiles WHERE organization_id = ?").get(req.organizationId);
+      const cp = await db.get("SELECT legal_name FROM company_profiles WHERE organization_id = ?", req.organizationId);
       if (!cp) throw badRequest("Save the company profile first, then link this identity to it");
       return { display_name: cp.legal_name };
     },

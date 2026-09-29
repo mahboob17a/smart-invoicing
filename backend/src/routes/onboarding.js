@@ -15,22 +15,23 @@ const STEPS = [
   ["reportTemplate", "SELECT COUNT(*) c FROM report_template_configs WHERE organization_id = ?"],
 ];
 
-function stepsFor(orgId) {
-  return Object.fromEntries(STEPS.map(([k, sql]) => [k, db.prepare(sql).get(orgId).c > 0]));
+async function stepsFor(orgId) {
+  const counts = await Promise.all(STEPS.map(([, sql]) => db.get(sql, orgId)));
+  return Object.fromEntries(STEPS.map(([k], i) => [k, counts[i].c > 0]));
 }
 
 // GET /api/onboarding/status — lets the wizard resume at the first unsaved step.
-router.get("/status", handle((req, res) => {
-  const org = db.prepare("SELECT onboarding_complete FROM organizations WHERE id = ?").get(req.organizationId);
-  res.json({ onboardingComplete: !!org.onboarding_complete, order: STEPS.map(([k]) => k), steps: stepsFor(req.organizationId) });
+router.get("/status", handle(async (req, res) => {
+  const org = await db.get("SELECT onboarding_complete FROM organizations WHERE id = ?", req.organizationId);
+  res.json({ onboardingComplete: !!org.onboarding_complete, order: STEPS.map(([k]) => k), steps: await stepsFor(req.organizationId) });
 }));
 
 // POST /api/onboarding/complete — only once every step has been saved.
-router.post("/complete", handle((req, res) => {
-  const steps = stepsFor(req.organizationId);
+router.post("/complete", handle(async (req, res) => {
+  const steps = await stepsFor(req.organizationId);
   const missing = Object.keys(steps).filter((k) => !steps[k]);
   if (missing.length) throw badRequest(`Finish these steps first: ${missing.join(", ")}`, missing);
-  db.prepare("UPDATE organizations SET onboarding_complete = 1 WHERE id = ?").run(req.organizationId);
+  await db.run("UPDATE organizations SET onboarding_complete = 1 WHERE id = ?", req.organizationId);
   res.json({ onboardingComplete: true });
 }));
 

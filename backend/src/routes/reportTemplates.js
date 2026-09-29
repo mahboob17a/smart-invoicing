@@ -36,7 +36,7 @@ const router = makeListResource(
   }),
   {
     label: "Report template",
-    validate(v, { req }) {
+    async validate(v, { req }) {
       const cols = JSON.parse(v.columns_json);
       if (!Array.isArray(cols) || cols.length === 0) throw badRequest("Pick at least one report column");
       const bad = cols.filter((c) => !COLUMNS.includes(c));
@@ -46,7 +46,7 @@ const router = makeListResource(
       if (v.group_field && !SORT_FIELDS.includes(v.group_field)) throw badRequest("groupField is not a valid field");
       if (!["last", "exclude"].includes(v.undated_mode)) throw badRequest("undatedMode must be last or exclude");
       if (v.remarks_recipient_id) {
-        const ok = db.prepare("SELECT id FROM recipients WHERE id = ? AND organization_id = ?").get(v.remarks_recipient_id, req.organizationId);
+        const ok = await db.get("SELECT id FROM recipients WHERE id = ? AND organization_id = ?", v.remarks_recipient_id, req.organizationId);
         if (!ok) throw badRequest("That recipient does not exist in your account");
       }
     },

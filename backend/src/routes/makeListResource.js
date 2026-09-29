@@ -11,7 +11,7 @@ const { badRequest, notFound, handle } = require("../lib/http");
  * Field spec: { apiField, dbColumn, required?, type?: 'string'|'number'|'int'|'bool'|'json',
  *               min?, max?, default?, maxLength?, transform?(value) }
  * opts.validate(values, { req, id }) may throw badRequest for cross-field rules, and may
- * return extra column values to store (e.g. a derived field).
+ * return extra column values to store (e.g. a derived field). toApi and validate may be async.
  */
 function makeListResource(table, fields, toApi, opts = {}) {
   const router = express.Router();
@@ -63,51 +63,47 @@ function makeListResource(table, fields, toApi, opts = {}) {
   }
 
   const getOwned = (id, orgId) =>
-    db.prepare(`SELECT * FROM ${table} WHERE id = ? AND organization_id = ?`).get(id, orgId);
+    db.get(`SELECT * FROM ${table} WHERE id = ? AND organization_id = ?`, id, orgId);
 
-  router.get("/", handle((req, res) => {
-    const rows = db
-      .prepare(`SELECT * FROM ${table} WHERE organization_id = ? ORDER BY created_at ASC`)
-      .all(req.organizationId);
-    res.json(rows.map((r) => toApi(r, req)));
+  router.get("/", handle(async (req, res) => {
+    const rows = await db.all(`SELECT * FROM ${table} WHERE organization_id = ? ORDER BY created_at ASC`, req.organizationId);
+    res.json(await Promise.all(rows.map((r) => toApi(r, req))));
   }));
 
-  router.get("/:id", handle((req, res) => {
-    const row = getOwned(req.params.id, req.organizationId);
+  router.get("/:id", handle(async (req, res) => {
+    const row = await getOwned(req.params.id, req.organizationId);
     if (!row) throw notFound(`${label} not found`);
-    res.json(toApi(row, req));
+    res.json(await toApi(row, req));
   }));
 
-  router.post("/", handle((req, res) => {
+  router.post("/", handle(async (req, res) => {
     const values = readBody(req.body || {}, { partial: false });
-    if (opts.validate) Object.assign(values, opts.validate(values, { req, id: null }) || {});
+    if (opts.validate) Object.assign(values, (await opts.validate(values, { req, id: null })) || {});
     const id = randomUUID();
     const cols = ["id", "organization_id", ...Object.keys(values)];
-    db.prepare(`INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).run(
-      id, req.organizationId, ...Object.values(values)
+    await db.run(`INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`, id, req.organizationId, ...Object.values(values)
     );
-    res.status(201).json(toApi(getOwned(id, req.organizationId), req));
+    res.status(201).json(await toApi(await getOwned(id, req.organizationId), req));
   }));
 
-  router.put("/:id", handle((req, res) => {
-    const existing = getOwned(req.params.id, req.organizationId);
+  router.put("/:id", handle(async (req, res) => {
+    const existing = await getOwned(req.params.id, req.organizationId);
     if (!existing) throw notFound(`${label} not found`);
     const values = readBody(req.body || {}, { partial: true });
-    if (opts.validate) Object.assign(values, opts.validate({ ...existing, ...values }, { req, id: existing.id }) || {});
+    if (opts.validate) Object.assign(values, (await opts.validate({ ...existing, ...values }, { req, id: existing.id })) || {});
     const keys = Object.keys(values);
     if (keys.length) {
-      db.prepare(
-        `UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = datetime('now')
-         WHERE id = ? AND organization_id = ?`
-      ).run(...Object.values(values), existing.id, req.organizationId);
+      await db.run(
+        `UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = utc_now()
+         WHERE id = ? AND organization_id = ?`,
+        ...Object.values(values), existing.id, req.organizationId
+      );
     }
-    res.json(toApi(getOwned(existing.id, req.organizationId), req));
+    res.json(await toApi(await getOwned(existing.id, req.organizationId), req));
   }));
 
-  router.delete("/:id", handle((req, res) => {
-    const info = db
-      .prepare(`DELETE FROM ${table} WHERE id = ? AND organization_id = ?`)
-      .run(req.params.id, req.organizationId);
+  router.delete("/:id", handle(async (req, res) => {
+    const info = await db.run(`DELETE FROM ${table} WHERE id = ? AND organization_id = ?`, req.params.id, req.organizationId);
     if (info.changes === 0) throw notFound(`${label} not found`);
     res.status(204).send();
   }));

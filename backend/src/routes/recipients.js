@@ -27,13 +27,14 @@ module.exports = makeListResource(
   }),
   {
     label: "Recipient",
-    validate(values, { req, id }) {
+    async validate(values, { req, id }) {
       if (!values.code) return;
       if (!/^[A-Z0-9-]+$/.test(values.code))
         throw badRequest("Client code can only use letters, numbers and hyphens");
-      const clash = db
-        .prepare("SELECT id FROM recipients WHERE organization_id = ? AND code = ? AND id IS NOT ?")
-        .get(req.organizationId, values.code, id);
+      const clash = await db.get(
+        "SELECT id FROM recipients WHERE organization_id = ? AND code = ? AND id IS DISTINCT FROM ?",
+        req.organizationId, values.code, id
+      );
       if (clash) throw badRequest(`Client code ${values.code} is already used by another client`);
     },
   }

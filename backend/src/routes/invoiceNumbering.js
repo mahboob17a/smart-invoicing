@@ -36,38 +36,34 @@ function readConfig(body, base = {}) {
   return cfg;
 }
 
-function checkIdentity(orgId, identityId) {
+async function checkIdentity(orgId, identityId) {
   if (!identityId) return;
-  const ok = db.prepare("SELECT id FROM issuing_identities WHERE id = ? AND organization_id = ?").get(identityId, orgId);
+  const ok = await db.get("SELECT id FROM issuing_identities WHERE id = ? AND organization_id = ?", identityId, orgId);
   if (!ok) throw badRequest("That issuing identity does not exist in your account");
 }
 
-router.get("/", handle((req, res) => {
-  const org = db.prepare("SELECT invoice_numbering_scope FROM organizations WHERE id = ?").get(req.organizationId);
-  const rows = db
-    .prepare("SELECT * FROM invoice_number_series WHERE organization_id = ? ORDER BY created_at ASC")
-    .all(req.organizationId);
+router.get("/", handle(async (req, res) => {
+  const org = await db.get("SELECT invoice_numbering_scope FROM organizations WHERE id = ?", req.organizationId);
+  const rows = await db.all("SELECT * FROM invoice_number_series WHERE organization_id = ? ORDER BY created_at ASC", req.organizationId);
   res.json({ scope: org.invoice_numbering_scope, placeholders: PLACEHOLDERS, series: rows.map(toApi) });
 }));
 
-router.put("/scope", handle((req, res) => {
+router.put("/scope", handle(async (req, res) => {
   const { scope } = req.body || {};
   if (!["per_identity", "shared"].includes(scope)) throw badRequest("scope must be per_identity or shared");
-  db.prepare("UPDATE organizations SET invoice_numbering_scope = ? WHERE id = ?").run(scope, req.organizationId);
+  await db.run("UPDATE organizations SET invoice_numbering_scope = ? WHERE id = ?", scope, req.organizationId);
   res.json({ scope });
 }));
 
-router.post("/preview", handle((req, res) => {
+router.post("/preview", handle(async (req, res) => {
   const cfg = readConfig(req.body || {});
   res.json({ preview: previewNext({ ...cfg, periodKey: null }) });
 }));
 
-router.post("/", handle((req, res) => {
+router.post("/", handle(async (req, res) => {
   const cfg = readConfig(req.body || {});
-  checkIdentity(req.organizationId, cfg.issuingIdentityId);
-  const clash = db
-    .prepare("SELECT id FROM invoice_number_series WHERE organization_id = ? AND issuing_identity_id IS ?")
-    .get(req.organizationId, cfg.issuingIdentityId);
+  await checkIdentity(req.organizationId, cfg.issuingIdentityId);
+  const clash = await db.get("SELECT id FROM invoice_number_series WHERE organization_id = ? AND issuing_identity_id IS NOT DISTINCT FROM ?", req.organizationId, cfg.issuingIdentityId);
   if (clash)
     throw badRequest(
       cfg.issuingIdentityId
@@ -75,19 +71,15 @@ router.post("/", handle((req, res) => {
         : "Your account already has a shared numbering series. Edit it instead."
     );
   const id = randomUUID();
-  db.prepare(
-    `INSERT INTO invoice_number_series
+  await db.run(`INSERT INTO invoice_number_series
       (id, organization_id, issuing_identity_id, mode, format_pattern, prefix, padding, start_number, next_number, reset_rule)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, req.organizationId, cfg.issuingIdentityId, cfg.mode, cfg.formatPattern, cfg.prefix,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, req.organizationId, cfg.issuingIdentityId, cfg.mode, cfg.formatPattern, cfg.prefix,
     cfg.padding, cfg.nextNumber, cfg.nextNumber, cfg.resetRule);
-  res.status(201).json(toApi(db.prepare("SELECT * FROM invoice_number_series WHERE id = ?").get(id)));
+  res.status(201).json(toApi(await db.get("SELECT * FROM invoice_number_series WHERE id = ?", id)));
 }));
 
-router.put("/:id", handle((req, res) => {
-  const row = db
-    .prepare("SELECT * FROM invoice_number_series WHERE id = ? AND organization_id = ?")
-    .get(req.params.id, req.organizationId);
+router.put("/:id", handle(async (req, res) => {
+  const row = await db.get("SELECT * FROM invoice_number_series WHERE id = ? AND organization_id = ?", req.params.id, req.organizationId);
   if (!row) throw notFound("Numbering series not found");
   const current = rowToCfg(row);
   const cfg = readConfig(req.body || {}, current);
@@ -98,18 +90,14 @@ router.put("/:id", handle((req, res) => {
       `Number ${current.lastIssuedNumber} has already been issued. The next number must be ${current.lastIssuedNumber + 1} or higher.`
     );
   }
-  db.prepare(
-    `UPDATE invoice_number_series
-     SET mode = ?, format_pattern = ?, prefix = ?, padding = ?, next_number = ?, reset_rule = ?, updated_at = datetime('now')
-     WHERE id = ?`
-  ).run(cfg.mode, cfg.formatPattern, cfg.prefix, cfg.padding, cfg.nextNumber, cfg.resetRule, row.id);
-  res.json(toApi(db.prepare("SELECT * FROM invoice_number_series WHERE id = ?").get(row.id)));
+  await db.run(`UPDATE invoice_number_series
+     SET mode = ?, format_pattern = ?, prefix = ?, padding = ?, next_number = ?, reset_rule = ?, updated_at = utc_now()
+     WHERE id = ?`, cfg.mode, cfg.formatPattern, cfg.prefix, cfg.padding, cfg.nextNumber, cfg.resetRule, row.id);
+  res.json(toApi(await db.get("SELECT * FROM invoice_number_series WHERE id = ?", row.id)));
 }));
 
-router.get("/:id/preview", handle((req, res) => {
-  const row = db
-    .prepare("SELECT * FROM invoice_number_series WHERE id = ? AND organization_id = ?")
-    .get(req.params.id, req.organizationId);
+router.get("/:id/preview", handle(async (req, res) => {
+  const row = await db.get("SELECT * FROM invoice_number_series WHERE id = ? AND organization_id = ?", req.params.id, req.organizationId);
   if (!row) throw notFound("Numbering series not found");
   res.json({ preview: previewNext(rowToCfg(row)) });
 }));

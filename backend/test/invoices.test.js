@@ -183,9 +183,9 @@ test("several devices converting at once: distinct, consecutive numbers", async 
   assert.equal(Number((await nextPreview()).split("-").pop()), first + 13);
 });
 
-test("several server processes on one database never share a number", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "si-conc-"));
-  const env = { ...process.env, DATABASE_FILE: path.join(dir, "c.db") };
+test("several server processes on one database never share a number", async (t) => {
+  if (!process.env.TEST_DATABASE_URL) return t.skip("needs a PostgreSQL server: set TEST_DATABASE_URL");
+  const env = { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL };
   const worker = path.join(__dirname, "fixtures", "allocate-worker.js");
   const run = (args) => new Promise((resolve, reject) =>
     execFile(process.execPath, [worker, ...args], { env }, (e, out, err) => (e ? reject(new Error(err || e.message)) : resolve(JSON.parse(out)))));
@@ -196,7 +196,6 @@ test("several server processes on one database never share a number", async () =
   assert.equal(new Set(all).size, 160, "no duplicates");
   const nums = all.map((s) => Number(s.split("-").pop())).sort((a, b) => a - b);
   assert.deepEqual(nums, Array.from({ length: 160 }, (_, i) => i + 1), "no gaps");
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("Blank mode: no number assigned, field left empty, filename still unique", async () => {

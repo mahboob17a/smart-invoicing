@@ -14,8 +14,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",
+    "@electric-sql/pglite": "^0.5.8",
+    "@supabase/supabase-js": "^2.117.2",
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
     "docx": "^9.8.1",
     "docxtemplater": "^3.71.0",
@@ -26,6 +27,7 @@
     "multer": "^2.0.2",
     "openai": "^7.23.0",
     "pdfkit": "^0.17.2",
+    "pg": "^8.23.0",
     "pizzip": "^3.3.0"
   }
 }

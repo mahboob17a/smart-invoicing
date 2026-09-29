@@ -1,0 +1,29 @@
+# Render Blueprint — Smart Invoicing backend (Docker, with LibreOffice for PDFs).
+# In Render: New + > Blueprint > pick this GitHub repo. Render asks for the
+# values marked "sync: false" (copy them from your Supabase project); nothing
+# secret is stored in this file.
+services:
+  - type: web
+    name: smart-invoicing-backend
+    runtime: docker
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    region: singapore        # pick the same region as your Supabase project
+    plan: free               # free sleeps after 15 min idle (first request then takes ~1 min); "starter" stays awake
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL        # Supabase > Connect > Session pooler (port 5432)
+        sync: false
+      - key: SUPABASE_URL        # Supabase > Project Settings > API > Project URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY   # Supabase > Project Settings > API keys > service_role / secret key
+        sync: false
+      - key: OPENAI_API_KEY      # optional: AI bill reading (or ANTHROPIC_API_KEY)
+        sync: false
+      - key: STORAGE_DRIVER
+        value: supabase
+      - key: SUPABASE_BUCKET
+        value: smart-invoicing

@@ -1,20 +1,19 @@
 const express = require("express");
 const { randomUUID } = require("crypto");
 const db = require("../db");
+const { handle } = require("../lib/http");
 
 const router = express.Router();
 
 // GET /api/company-profile
-router.get("/", (req, res) => {
-  const profile = db
-    .prepare("SELECT * FROM company_profiles WHERE organization_id = ?")
-    .get(req.organizationId);
+router.get("/", handle(async (req, res) => {
+  const profile = await db.get("SELECT * FROM company_profiles WHERE organization_id = ?", req.organizationId);
   if (!profile) return res.json(null);
   res.json(toApi(profile));
-});
+}));
 
 // POST /api/company-profile  (create on first save, update on every save after)
-router.post("/", (req, res) => {
+router.post("/", handle(async (req, res) => {
   const b = req.body || {};
   const t = (v) => (typeof v === "string" ? v.trim() || null : v ?? null);
   const legalName = t(b.legalName);
@@ -27,24 +26,17 @@ router.post("/", (req, res) => {
     return res.status(400).json({ error: "legalName is required" });
   }
 
-  const existing = db
-    .prepare("SELECT id FROM company_profiles WHERE organization_id = ?")
-    .get(req.organizationId);
+  const existing = await db.get("SELECT id FROM company_profiles WHERE organization_id = ?", req.organizationId);
 
   if (existing) {
-    db.prepare(
-      `UPDATE company_profiles
+    await db.run(`UPDATE company_profiles
        SET legal_name = ?, registration_no = ?, tax_no = ?, address_block = ?,
-           logo_asset_url = ?, contact_details = ?, updated_at = datetime('now')
-       WHERE organization_id = ?`
-    ).run(legalName, registrationNo, taxNo, addressBlock, logoAssetUrl, contactDetails, req.organizationId);
+           logo_asset_url = ?, contact_details = ?, updated_at = utc_now()
+       WHERE organization_id = ?`, legalName, registrationNo, taxNo, addressBlock, logoAssetUrl, contactDetails, req.organizationId);
   } else {
-    db.prepare(
-      `INSERT INTO company_profiles
+    await db.run(`INSERT INTO company_profiles
         (id, organization_id, legal_name, registration_no, tax_no, address_block, logo_asset_url, contact_details)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      randomUUID(),
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, randomUUID(),
       req.organizationId,
       legalName,
       registrationNo,
@@ -55,11 +47,9 @@ router.post("/", (req, res) => {
     );
   }
 
-  const saved = db
-    .prepare("SELECT * FROM company_profiles WHERE organization_id = ?")
-    .get(req.organizationId);
+  const saved = await db.get("SELECT * FROM company_profiles WHERE organization_id = ?", req.organizationId);
   res.status(existing ? 200 : 201).json(toApi(saved));
-});
+}));
 
 function toApi(row) {
   return {

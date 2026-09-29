@@ -1,7 +1,5 @@
 // In-app template builder (Design Document v5.1 §6.5): a saved configuration
 // that is rendered to a Word document with the customer's own branding.
-const fs = require("fs");
-const path = require("path");
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType,
   AlignmentType, BorderStyle, ImageRun, Footer, HeightRule, VerticalAlign, TableLayoutType,
@@ -211,13 +209,12 @@ async function render(config, values, logo) {
 }
 
 /** Reads the organization logo (/uploads/<org>/logo-x.png) for embedding. */
-function loadLogo(logoUrl, uploadRoot) {
+async function loadLogo(logoUrl) {
   if (!logoUrl) return null;
   const m = logoUrl.match(/^\/uploads\/([0-9a-f-]{36}\/logo-[0-9a-f-]{36}\.(png|jpg|webp))$/);
   if (!m) return null;
-  const file = path.join(uploadRoot, m[1]);
-  if (!fs.existsSync(file)) return null;
-  const buffer = fs.readFileSync(file);
+  const buffer = await require("../storage").read(m[1]).catch(() => null);
+  if (!buffer) return null;
   return { buffer, type: m[2], size: imageSize(buffer, m[2]) };
 }
 
