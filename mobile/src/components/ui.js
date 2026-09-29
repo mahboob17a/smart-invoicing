@@ -212,6 +212,12 @@ export function Divider() {
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />;
 }
 
+// True when children include plain text (e.g. "Take a photo{extra}"), which
+// React Native only allows inside <Text>.
+function hasBareText(children) {
+  return React.Children.toArray(children).some((c) => typeof c === "string" || typeof c === "number");
+}
+
 export function Banner({ tone = "info", children }) {
   const { colors, radius, space } = useTheme();
   const bg = tone === "warning" ? colors.warningSoft : colors.primarySoft;
@@ -220,7 +226,7 @@ export function Banner({ tone = "info", children }) {
   return (
     <View style={{ flexDirection: "row", gap: space.sm, backgroundColor: bg, borderRadius: radius.md, padding: space.md, alignItems: "flex-start" }}>
       <Ionicons name={icon} size={18} color={fg} style={{ marginTop: 1 }} />
-      <View style={{ flex: 1 }}>{typeof children === "string" ? <T variant="small">{children}</T> : children}</View>
+      <View style={{ flex: 1 }}>{hasBareText(children) ? <T variant="small">{children}</T> : children}</View>
     </View>
   );
 }
