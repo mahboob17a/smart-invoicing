@@ -18,6 +18,13 @@ const path = require("path");
 const { AsyncLocalStorage } = require("async_hooks");
 
 const als = new AsyncLocalStorage();
+
+// All tables live in their own schema (default "smart_invoicing"), so they
+// never clash with other apps in the same Supabase project and are not
+// exposed by Supabase's public Data API.
+const SCHEMA = process.env.DATABASE_SCHEMA || "smart_invoicing";
+if (!/^[a-z_][a-z0-9_]*$/.test(SCHEMA)) throw new Error("DATABASE_SCHEMA must be lowercase letters, digits and _");
+const SEARCH_PATH = `SET search_path TO ${SCHEMA}, public`;
 const toPg = (sql) => {
   let i = 0;
   return sql.replace(/\?/g, () => `$${++i}`);
@@ -33,6 +40,7 @@ function pgDriver(url) {
   pg.types.setTypeParser(1700, (v) => Number(v));
   const ssl = /localhost|127\.0\.0\.1/.test(url) || process.env.DATABASE_SSL === "off" ? false : { rejectUnauthorized: false };
   const pool = new pg.Pool({ connectionString: url, ssl, max: Number(process.env.DATABASE_POOL_SIZE || 5) });
+  pool.on("connect", (client) => client.query(SEARCH_PATH).catch(() => {}));
   const wrap = (c) => ({
     query: async (sql, params) => { const r = await c.query(sql, params); return { rows: r.rows, rowCount: r.rowCount }; },
     exec: (sql) => c.query(sql), // no parameters -> simple protocol, several statements allowed
@@ -79,6 +87,13 @@ const migrations = [
 ];
 
 async function migrate() {
+  await driver.exec(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}; ${SEARCH_PATH};`);
+  // On Supabase, keep the browser-facing roles out of this schema entirely.
+  await driver.exec(`DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE 'REVOKE ALL ON SCHEMA ${SCHEMA} FROM anon, authenticated';
+    END IF;
+  END $$;`);
   await driver.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   const done = new Set((await driver.query("SELECT id FROM schema_migrations", [])).rows.map((r) => r.id));

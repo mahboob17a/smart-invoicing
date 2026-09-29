@@ -8,7 +8,7 @@ services:
     runtime: docker
     dockerContext: ./backend
     dockerfilePath: ./backend/Dockerfile
-    region: singapore        # pick the same region as your Supabase project
+    region: singapore        # closest Render region to Supabase Seoul (ap-northeast-2)
     plan: free               # free sleeps after 15 min idle (first request then takes ~1 min); "starter" stays awake
     healthCheckPath: /health
     autoDeploy: true
