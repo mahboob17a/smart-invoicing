@@ -51,6 +51,20 @@ Restart the backend after changing `.env`. Without a key, bills still upload
 and open for you to type in. For a demo without a key, set
 `EXTRACTION_PROVIDER=mock`.
 
+## Status — Phase 3: Invoice templates (Weeks 6–8)
+
+| Roadmap item | State |
+| --- | --- |
+| Template builder with live preview | Done — title, accent colour, columns, row shading and height, logo and invoice-number position, declaration, signature, supplier reference, footer note; the preview uses your letterhead, a sample client and your next invoice number |
+| Word (.docx) template upload with `{{Token}}` detection | Done — item rows are any `{{#items}}…{{/items}}` loop; broken or unclosed tokens give a readable error; example template download |
+| Field mapping | Done — suggestions from token names; unmapped tokens can be left as written; warns if an invoice-number token is mapped to the vendor's original bill number |
+| Merge engine | Done — fills builder and uploaded templates with the §8.4 invoice math; "Download sample" gives the finished .docx |
+| Versioning | Done — uploading a new version keeps mappings for tokens that are still there and flags new ones |
+| Tests | 59 backend tests, incl. merge output, versioning and template isolation between organizations |
+
+Open **Settings → Invoice templates** in the app. Phase 4 uses the default
+template when an invoice is generated.
+
 ## Run the backend
 
 Needs Node.js 22 or newer.
@@ -129,7 +143,8 @@ To get the scanner, install the Smart Invoicing development build once:
 
 Everything else works the same in Expo Go and in the development build.
 
-## Next: Phase 3 (Weeks 6–8)
+## Next: Phase 4 (Weeks 9–10)
 
-Template builder with live preview, Word template upload with placeholder
-detection and field mapping, and the merge engine for uploaded templates.
+Invoice generation from a reviewed bill: pricing rules and markup applied,
+the app-assigned invoice number, merge into the default template, and PDF/Word
+output to share.

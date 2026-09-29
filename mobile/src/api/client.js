@@ -49,6 +49,8 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
 
 export const assetUrl = (path) => (path && path.startsWith("/") ? `${API_BASE_URL}${path}` : path);
 
+export const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 // React Native's FormData takes { uri, name, type }; browsers need a Blob.
 async function appendFile(form, field, { uri, name, type }) {
   if (Platform.OS === "web") {
@@ -114,6 +116,24 @@ export const api = {
         await appendFile(form, "files", { uri: p.uri, name: p.name || `page-${i + 1}.jpg`, type: p.mimeType || "image/jpeg" });
       }
       return request("/api/bills", { method: "POST", form });
+    },
+  },
+
+  templates: {
+    list: () => request("/api/templates"),
+    get: (id) => request(`/api/templates/${id}`),
+    fields: () => request("/api/templates/fields"),
+    sampleValues: () => request("/api/templates/sample-values"),
+    create: (payload) => request("/api/templates", { method: "POST", body: payload }),
+    update: (id, payload) => request(`/api/templates/${id}`, { method: "PUT", body: payload }),
+    saveMapping: (id, mappings) => request(`/api/templates/${id}/mapping`, { method: "PUT", body: { mappings } }),
+    makeDefault: (id) => request(`/api/templates/${id}/default`, { method: "POST" }),
+    remove: (id) => request(`/api/templates/${id}`, { method: "DELETE" }),
+    /** file: { uri, name, mimeType } from the document picker. id = upload a new version of that template. */
+    upload: async (file, id) => {
+      const form = new FormData();
+      await appendFile(form, "file", { uri: file.uri, name: file.name || "template.docx", type: DOCX_TYPE });
+      return request(id ? `/api/templates/${id}/upload` : "/api/templates/upload", { method: "POST", form });
     },
   },
 

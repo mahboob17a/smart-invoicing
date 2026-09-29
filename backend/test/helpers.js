@@ -30,10 +30,11 @@ async function call(method, url, { token, body, raw, headers = {} } = {}) {
     payload = JSON.stringify(body);
   }
   const res = await fetch(base + url, { method, headers: h, body: payload });
-  const text = await res.text();
+  const buf = Buffer.from(await res.arrayBuffer());
+  const text = buf.toString("utf8");
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = text; }
-  return { status: res.status, body: json, res };
+  return { status: res.status, body: json, res, buf };
 }
 
 let n = 0;

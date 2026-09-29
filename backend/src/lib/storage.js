@@ -7,8 +7,8 @@ const { randomUUID } = require("crypto");
 
 const ROOT = process.env.UPLOAD_DIR || path.join(__dirname, "../../uploads");
 
-function save(organizationId, buffer, ext) {
-  const key = path.posix.join(organizationId, "bills", `${randomUUID()}.${ext}`);
+function save(organizationId, buffer, ext, folder = "bills") {
+  const key = path.posix.join(organizationId, folder, `${randomUUID()}.${ext}`);
   const full = path.join(ROOT, key);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, buffer);

@@ -26,6 +26,10 @@ import BillsScreen from "../screens/bills/BillsScreen";
 import CaptureScreen from "../screens/bills/CaptureScreen";
 import ProcessingScreen from "../screens/bills/ProcessingScreen";
 import ReviewScreen from "../screens/bills/ReviewScreen";
+import TemplatesScreen from "../screens/templates/TemplatesScreen";
+import TemplateBuilderScreen from "../screens/templates/TemplateBuilderScreen";
+import TemplateUploadScreen from "../screens/templates/TemplateUploadScreen";
+import TemplateMappingScreen from "../screens/templates/TemplateMappingScreen";
 import { firstIncompleteRoute } from "../screens/setup/steps";
 
 const Stack = createNativeStackNavigator();
@@ -121,6 +125,10 @@ function AppStack() {
       <Stack.Screen name="Capture" component={CaptureScreen} options={{ presentation: "modal" }} />
       <Stack.Screen name="BillProcessing" component={ProcessingScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="BillReview" component={ReviewScreen} />
+      <Stack.Screen name="Templates" component={TemplatesScreen} />
+      <Stack.Screen name="TemplateBuilder" component={TemplateBuilderScreen} />
+      <Stack.Screen name="TemplateUpload" component={TemplateUploadScreen} />
+      <Stack.Screen name="TemplateMapping" component={TemplateMappingScreen} />
       {SETUP_SCREENS.map(([name, component]) => <Stack.Screen key={name} name={name} component={component} />)}
     </Stack.Navigator>
   );

@@ -220,6 +220,54 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_items_bill ON bill_line_items(bill_id);`);
     },
   },
+  {
+    id: 4,
+    name: "phase 3: invoice templates (builder + uploaded), versions, field mappings",
+    up() {
+      db.exec(`
+      CREATE TABLE IF NOT EXISTS templates (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL REFERENCES organizations(id),
+        name TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('builder','uploaded')),
+        is_default INTEGER NOT NULL DEFAULT 0,
+        config_json TEXT,
+        current_version INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'ready' CHECK (status IN ('ready','needs_mapping')),
+        created_by TEXT REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_templates_org ON templates(organization_id);
+
+      -- Every uploaded .docx is kept. Invoices generated in Phase 4 record the
+      -- version they used, so a later re-upload never changes them (§7.4, §12).
+      CREATE TABLE IF NOT EXISTS template_files (
+        id TEXT PRIMARY KEY,
+        template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+        organization_id TEXT NOT NULL REFERENCES organizations(id),
+        version INTEGER NOT NULL,
+        storage_key TEXT NOT NULL,
+        original_filename TEXT,
+        size_bytes INTEGER NOT NULL,
+        tokens_json TEXT NOT NULL,
+        loop_name TEXT,
+        uploaded_by TEXT REFERENCES users(id),
+        uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (template_id, version)
+      );
+
+      -- system_field NULL = "leave as written" (§7.2).
+      CREATE TABLE IF NOT EXISTS template_field_mappings (
+        id TEXT PRIMARY KEY,
+        template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+        token_name TEXT NOT NULL,
+        is_line_item INTEGER NOT NULL DEFAULT 0,
+        system_field TEXT,
+        UNIQUE (template_id, token_name, is_line_item)
+      );`);
+    },
+  },
 ];
 
 db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (

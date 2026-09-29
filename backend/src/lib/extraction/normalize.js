@@ -47,7 +47,8 @@ function parseDate(v) {
   return null;
 }
 
-const round = (n, dp = 3) => (n === null || n === undefined ? null : Math.round((n + Number.EPSILON) * 10 ** dp) / 10 ** dp);
+// Decimal-safe half-up rounding: 0.4025 -> 0.403 (plain Math.round gives 0.402).
+const round = (n, dp = 3) => (n === null || n === undefined ? null : Number(`${Math.round(Number(`${Number(n.toPrecision(12))}e${dp}`))}e-${dp}`));
 const clean = (s) => (typeof s === "string" && s.trim() ? s.trim().replace(/\s+/g, " ") : null);
 const low = (c) => c === "low";
 

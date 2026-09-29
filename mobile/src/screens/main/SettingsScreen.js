@@ -26,6 +26,9 @@ export default function SettingsScreen({ navigation }) {
         ))}
       </Card>
       <Card>
+        <ListRow icon="color-palette-outline" title="Invoice templates" subtitle="Build one, or upload your Word layout" onPress={() => navigation.navigate("Templates")} />
+      </Card>
+      <Card>
         <ListRow icon="person-circle-outline" title={user?.name} subtitle={`${user?.email}${user?.isAccountOwner ? " · Account Owner" : ""}`} />
         <Divider />
         <ListRow icon="people-circle-outline" title="Team & invites" subtitle="Arrives in Phase 6" />

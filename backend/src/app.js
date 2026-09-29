@@ -32,15 +32,21 @@ app.use("/api/filename-patterns", require("./routes/filenamePatterns"));
 app.use("/api/report-templates", require("./routes/reportTemplates"));
 app.use("/api/uploads", uploads);
 app.use("/api/bills", require("./routes/bills"));
+app.use("/api/templates", require("./routes/templates"));
 
 app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, details: err.details });
+  if (err.name === "TemplateError") return res.status(400).json({ error: err.message });
   if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Request body is not valid JSON" });
   if (err.code === "LIMIT_FILE_SIZE")
-    return res.status(400).json({ error: req.originalUrl.startsWith("/api/bills") ? "Each bill file must be 15 MB or smaller" : "Logo must be 2 MB or smaller" });
+    return res.status(400).json({
+      error: req.originalUrl.startsWith("/api/bills") ? "Each bill file must be 15 MB or smaller"
+        : req.originalUrl.startsWith("/api/templates") ? "Template files must be 5 MB or smaller"
+        : "Logo must be 2 MB or smaller",
+    });
   if (err.code === "LIMIT_FILE_COUNT" || err.code === "LIMIT_UNEXPECTED_FILE")
     return res.status(400).json({ error: "Upload up to 5 photos per bill" });
   if (err.status === 404) return res.status(404).json({ error: "Not found" });

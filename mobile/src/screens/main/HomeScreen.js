@@ -12,10 +12,12 @@ export default function HomeScreen({ navigation }) {
   const { colors, space, radius } = useTheme();
   const [summary, setSummary] = useState(null);
   const [nextNo, setNextNo] = useState(null);
+  const [templateCount, setTemplateCount] = useState(null);
 
   useFocusEffect(useCallback(() => {
     api.bills.summary().then(setSummary).catch(() => {});
     api.numbering.get().then((n) => setNextNo(n.series[0]?.preview ?? null)).catch(() => {});
+    api.templates.list().then((l) => setTemplateCount(l.filter((t) => t.status === "ready").length)).catch(() => {});
   }, []));
 
   const firstName = user?.name?.split(" ")[0];
@@ -41,6 +43,13 @@ export default function HomeScreen({ navigation }) {
       </View>
       {summary?.aiProvider === "manual" ? (
         <Banner>AI bill reading isn't switched on for this server yet, so bills open for you to type in. Ask your administrator to add the AI key.</Banner>
+      ) : null}
+      {templateCount === 0 ? (
+        <Card>
+          <T variant="heading">Set up your invoice template</T>
+          <T color={colors.textMuted}>Choose how your invoices look: build one in the app or upload the Word layout you already use.</T>
+          <Button title="Set up template" icon="color-palette-outline" variant="ghost" onPress={() => navigation.navigate("Templates")} />
+        </Card>
       ) : null}
       {summary && summary.total === 0 ? (
         <Card>
