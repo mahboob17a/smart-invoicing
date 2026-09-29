@@ -111,6 +111,10 @@ const ready = (async () => {
     kind = "postgres";
     driver = pgDriver(process.env.DATABASE_URL);
   } else {
+    // The in-process database needs ~800 MB and keeps data on the server's
+    // disk, so it is for your PC only. A hosted server must use DATABASE_URL.
+    if (process.env.NODE_ENV === "production")
+      throw new Error("DATABASE_URL is not set. Add your Supabase connection string as an environment variable named DATABASE_URL.");
     kind = "pglite";
     driver = pgliteDriver(process.env.DATABASE_DIR || path.join(__dirname, "../../.pgdata"));
   }
