@@ -80,6 +80,25 @@ function pgliteDriver(dir) {
   };
 }
 
+/**
+ * DATABASE_URL may leave the password out; DATABASE_PASSWORD then supplies it
+ * (any characters allowed — it is encoded here, so nothing needs escaping).
+ */
+function connectionUrl() {
+  const raw = process.env.DATABASE_URL.trim().replace(/^DATABASE_URL=/, "").replace(/^["']|["']$/g, "");
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("DATABASE_URL is not a valid address. It must start with postgresql:// (copy it from Supabase > Connect > Session pooler).");
+  }
+  if (!/^postgres(ql)?:$/.test(url.protocol)) throw new Error("DATABASE_URL must start with postgresql://");
+  if (process.env.DATABASE_PASSWORD) url.password = encodeURIComponent(process.env.DATABASE_PASSWORD);
+  if (!url.password || /YOUR-PASSWORD/i.test(decodeURIComponent(url.password)))
+    throw new Error("The database password is missing. Add it as DATABASE_PASSWORD (or inside DATABASE_URL).");
+  return url.toString();
+}
+
 // Schema versions. 1 = everything up to Phase 4 (see schema.sql). Add new
 // entries for later changes; each runs once and is recorded.
 const migrations = [
@@ -109,7 +128,7 @@ async function migrate() {
 const ready = (async () => {
   if (process.env.DATABASE_URL) {
     kind = "postgres";
-    driver = pgDriver(process.env.DATABASE_URL);
+    driver = pgDriver(connectionUrl());
   } else {
     // The in-process database needs ~800 MB and keeps data on the server's
     // disk, so it is for your PC only. A hosted server must use DATABASE_URL.
